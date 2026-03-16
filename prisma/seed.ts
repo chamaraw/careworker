@@ -1,8 +1,13 @@
+import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { addDays, subDays, setHours, setMinutes } from "date-fns";
+import { addDays, setHours, setMinutes } from "date-fns";
 
-const prisma = new PrismaClient();
+// Uses DATABASE_URL from .env (Neon Postgres or any PostgreSQL).
+// Ensure schema is applied first: npx prisma db push   or   npx prisma migrate deploy
+const prisma = new PrismaClient({
+  log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+});
 
 async function main() {
   const hashedPassword = bcrypt.hashSync("password123", 10);
