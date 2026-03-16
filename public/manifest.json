@@ -1,0 +1,11 @@
+{
+  "name": "FileyCare Worker",
+  "short_name": "FileyCare",
+  "description": "Care worker scheduler and journal",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#f5f3f0",
+  "theme_color": "#4a90c2",
+  "orientation": "any",
+  "scope": "/"
+}

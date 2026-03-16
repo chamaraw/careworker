@@ -1,0 +1,250 @@
+// Prisma schema for FileyCareWorker - Care Worker Scheduler & Journal
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  CARE_WORKER
+}
+
+enum ShiftStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum JournalCategory {
+  ROUTINE
+  MEDICATION
+  BEHAVIOR
+  MEAL
+  PERSONAL_CARE
+  OTHER
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IncidentStatus {
+  OPEN
+  INVESTIGATING
+  RESOLVED
+  CLOSED
+}
+
+enum TimeRecordApproval {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum CarePlanStatus {
+  ACTIVE
+  UNDER_REVIEW
+  COMPLETED
+  ARCHIVED
+}
+
+enum FollowUpStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  passwordHash   String
+  name           String
+  phone          String?
+  role           Role      @default(CARE_WORKER)
+  qualifications String?
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  shiftsAsWorker    Shift[]
+  journalEntries    JournalEntry[]
+  timeRecords       TimeRecord[]
+  incidentReports   IncidentReport[]
+  calendarNotes     CalendarNote[]
+  auditLogs         AuditLog[]
+  passwordResetTokens PasswordResetToken[]
+  followUpActionsCreated FollowUpAction[] @relation("FollowUpCreatedBy")
+  followUpActionsCompleted FollowUpAction[] @relation("FollowUpCompletedBy")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model Property {
+  id        String   @id @default(cuid())
+  name      String   // Care home / venue name
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  serviceUsers ServiceUser[]
+  shifts       Shift[]
+}
+
+model ServiceUser {
+  id              String    @id @default(cuid())
+  name            String
+  dateOfBirth     DateTime?
+  address         String?
+  propertyId      String?   // Which care venue they reside at
+  allergies       String?
+  medicalNotes    String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  careNeedsLevel  String?   // e.g. "low", "medium", "high"
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  property        Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  shifts          Shift[]
+  incidentReports IncidentReport[]
+  carePlans       CarePlan[]
+  followUpActions FollowUpAction[]
+}
+
+
+model Shift {
+  id            String      @id @default(cuid())
+  careWorkerId  String
+  serviceUserId String
+  propertyId    String?     // Venue where shift takes place (can override service user's venue)
+  startAt       DateTime
+  endAt         DateTime
+  status        ShiftStatus @default(SCHEDULED)
+  notes         String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  careWorker    User         @relation(fields: [careWorkerId], references: [id], onDelete: Cascade)
+  serviceUser   ServiceUser  @relation(fields: [serviceUserId], references: [id], onDelete: Cascade)
+  property      Property?    @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  journalEntries JournalEntry[]
+}
+
+model JournalEntry {
+  id        String         @id @default(cuid())
+  shiftId   String
+  category  JournalCategory
+  content   String
+  recordedAt DateTime      @default(now())
+  createdAt DateTime       @default(now())
+
+  shift       Shift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  careWorker  User  @relation(fields: [careWorkerId], references: [id], onDelete: Cascade)
+  careWorkerId String
+}
+
+model TimeRecord {
+  id          String    @id @default(cuid())
+  userId      String
+  clockInAt   DateTime
+  clockOutAt  DateTime?
+  breakMinutes Int      @default(0)
+  totalMinutes Int?    // calculated: (clockOut - clockIn) - breakMinutes
+  approvalStatus TimeRecordApproval @default(PENDING)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model IncidentReport {
+  id            String          @id @default(cuid())
+  serviceUserId String
+  careWorkerId  String
+  severity      IncidentSeverity
+  status        IncidentStatus  @default(OPEN)
+  description   String
+  actionTaken   String?
+  followUpNotes String?
+  occurredAt    DateTime       @default(now())
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  serviceUser ServiceUser @relation(fields: [serviceUserId], references: [id], onDelete: Cascade)
+  careWorker  User         @relation(fields: [careWorkerId], references: [id], onDelete: Cascade)
+  followUpActions FollowUpAction[]
+}
+
+model FollowUpAction {
+  id            String        @id @default(cuid())
+  serviceUserId String
+  description   String
+  dueDate       DateTime      // date (or datetime) when follow-up should happen
+  status        FollowUpStatus @default(PENDING)
+  incidentId    String?       // optional link to incident
+  createdById   String?
+  completedAt   DateTime?
+  completedById String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  serviceUser ServiceUser @relation(fields: [serviceUserId], references: [id], onDelete: Cascade)
+  incident    IncidentReport? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  createdBy   User?        @relation("FollowUpCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  completedBy User?        @relation("FollowUpCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+}
+
+model CarePlan {
+  id            String        @id @default(cuid())
+  serviceUserId String
+  title         String
+  goals         String?       // text or JSON
+  interventions String?
+  reviewDate    DateTime?
+  status        CarePlanStatus @default(ACTIVE)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  serviceUser ServiceUser @relation(fields: [serviceUserId], references: [id], onDelete: Cascade)
+}
+
+model CalendarNote {
+  id        String   @id @default(cuid())
+  date      DateTime // calendar date (date only)
+  content   String
+  userId    String   // who created it (admin or care worker)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String   // CREATE, UPDATE, DELETE
+  entity    String   // e.g. "Shift", "JournalEntry"
+  entityId  String?
+  details   String?  // JSON: before/after or payload
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+}

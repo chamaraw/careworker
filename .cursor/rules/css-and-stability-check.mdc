@@ -1,0 +1,41 @@
+---
+description: CSS and UI stability check before completing tasks — avoid styles/asset breakage
+alwaysApply: true
+---
+
+# CSS & UI Stability — Completion Check
+
+Before marking any task complete, verify the following so we don't regress into CSS/asset or "missing error components" issues.
+
+## 1. CSS / Tailwind (app/globals.css and any new CSS)
+
+- **This project uses Tailwind v3** (see `tailwind.config.ts`). Do **not** add `@import` for packages that use Tailwind v4 syntax (`@theme`, `@custom-variant`, `@utility`).
+- In `app/globals.css`, keep only: `@tailwind base;` `@tailwind components;` `@tailwind utilities;` plus project `@layer` and `:root`/`.dark` tokens. No `@import "tw-animate-css"` or `@import "shadcn/tailwind.css"` unless the project is upgraded to Tailwind v4.
+- New global styles: use standard CSS or Tailwind v3-compatible utilities only.
+
+## 2. Error boundaries (app/error.tsx, app/global-error.tsx)
+
+- These must **never** import app UI (e.g. `@/components/ui/button`, `@/components/ui/alert`). If those chunks fail, the error page would fail too and show "missing required error components".
+- Use **inline styles and plain HTML/JSX** only (like the current `app/global-error.tsx`). No `className` that depends on Tailwind or CSS variables if that could load after the error.
+
+## 3. Root loading (app/loading.tsx)
+
+- Keep a minimal root `app/loading.tsx` that uses inline styles or very basic markup so the first paint is stable. Do not remove it without replacing with an equivalent.
+
+## 4. After changing layout, CSS, or error/loading
+
+- Run `npm run build` and confirm it succeeds.
+- If you added or changed `@import` in CSS, double-check the imported file is v3-compatible (no `@theme` / `@utility`).
+
+## 5. If you see main-app.js 404 or stylesheet/chunk issues
+
+- **Cause:** Browser or Next.js cache points at old chunk URLs (e.g. `main-app.js?v=...`) that no longer exist after a rebuild or dev restart.
+- **Fix:** Run `npm run clean` (removes `.next` and caches), then start fresh: `npm run dev` or `npm run restart` (clean + build + dev). Hard-refresh the browser (Cmd+Shift+R / Ctrl+Shift+R) or clear site data for localhost.
+
+## Quick checklist before "done"
+
+- [ ] No new Tailwind v4–only imports in globals.css
+- [ ] `app/error.tsx` and `app/global-error.tsx` have no imports from `@/components/*`
+- [ ] Root `app/loading.tsx` exists and is minimal
+- [ ] `npm run build` passes after changes
+- [ ] If chunks/styles break: run `npm run clean` then `npm run dev`
