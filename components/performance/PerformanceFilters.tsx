@@ -79,7 +79,7 @@ export function PerformanceFilters({
         </Select>
       </div>
       <div className="space-y-2">
-        <Label>Care venue</Label>
+        <Label>Property</Label>
         <Select
           name="property"
           value={propertyValue}
@@ -94,11 +94,11 @@ export function PerformanceFilters({
             {propertyValue ? (
               <span className="truncate">{properties.find((p) => p.id === propertyValue)?.name ?? "All"}</span>
             ) : (
-              <span className="text-[var(--muted-foreground)]">All venues</span>
+              <span className="text-[var(--muted-foreground)]">All properties</span>
             )}
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All venues</SelectItem>
+            <SelectItem value="">All properties</SelectItem>
             {properties.map((p) => (
               <SelectItem key={p.id} value={p.id}>
                 {p.name}

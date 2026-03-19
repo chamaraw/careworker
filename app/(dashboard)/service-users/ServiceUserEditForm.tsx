@@ -117,7 +117,7 @@ export function ServiceUserEditForm({
       </div>
       {properties.length > 0 && (
         <div className="space-y-2">
-          <Label>Care venue (property)</Label>
+          <Label>Property</Label>
           <Select value={propertyId} onValueChange={(v) => setPropertyId(v ?? "")}>
             <SelectTrigger className="min-h-[48px]">
               {propertyId ? (

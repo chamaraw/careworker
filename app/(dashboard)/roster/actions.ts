@@ -6,7 +6,12 @@ import { revalidatePath } from "next/cache";
 import { logAudit } from "@/lib/audit";
 import type { ShiftStatus } from "@prisma/client";
 
-export async function getShifts(start: Date, end: Date, careWorkerId?: string) {
+export async function getShifts(
+  start: Date,
+  end: Date,
+  careWorkerId?: string,
+  propertyId?: string | null
+) {
   const session = await auth();
   if (!session?.user?.id) return [];
   const isAdmin = (session.user as { role?: string }).role === "ADMIN";
@@ -14,6 +19,7 @@ export async function getShifts(start: Date, end: Date, careWorkerId?: string) {
     where: {
       startAt: { lte: end },
       endAt: { gte: start },
+      ...(propertyId != null && propertyId !== "" ? { propertyId } : {}),
       ...(!isAdmin && careWorkerId !== session.user.id ? { careWorkerId: session.user.id } : careWorkerId ? { careWorkerId } : {}),
     },
     include: {

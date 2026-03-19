@@ -4,9 +4,9 @@ import {
   getActiveTimeRecord,
   getTimeRecords,
   getHoursSummary,
+  getPropertiesForClockIn,
 } from "./actions";
-import { ClockButton } from "@/components/hours/ClockButton";
-import { BreakButton } from "@/components/hours/BreakButton";
+import { ClockInSection } from "@/components/hours/ClockInSection";
 import { TimesheetTable } from "@/components/hours/TimesheetTable";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -23,7 +23,7 @@ export default async function HoursPage({
   const dateTo = params.dateTo ? new Date(params.dateTo) : endOfWeek(new Date());
   const workerId = params.worker || undefined;
 
-  const [activeRecord, records, summary] = await Promise.all([
+  const [activeRecord, records, summary, clockInProperties] = await Promise.all([
     getActiveTimeRecord(session.user.id),
     getTimeRecords({
       userId: workerId,
@@ -31,6 +31,7 @@ export default async function HoursPage({
       dateTo,
     }),
     getHoursSummary(workerId ?? undefined, dateFrom, dateTo),
+    !isAdmin ? getPropertiesForClockIn() : Promise.resolve([]),
   ]);
 
   const totalHours = (summary.totalMinutes / 60).toFixed(1);
@@ -52,12 +53,9 @@ export default async function HoursPage({
               <p className="body-text-muted mb-5">
                 {activeRecord
                   ? `You clocked in at ${activeRecord.clockInAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`
-                  : "Tap below when you start your shift."}
+                  : "Tap below when you start your shift. Select the property first."}
               </p>
-              <div className="flex flex-col gap-4">
-                <ClockButton isClockedIn={!!activeRecord} />
-                {activeRecord && <BreakButton />}
-              </div>
+              <ClockInSection isClockedIn={!!activeRecord} properties={clockInProperties} />
             </CardContent>
           </Card>
         </section>
@@ -70,6 +68,9 @@ export default async function HoursPage({
 
       <section className="space-y-3">
         <h2 className="section-title">Time records</h2>
+        <p className="text-sm text-[var(--muted-foreground)]">
+          {isAdmin && "To add hours manually and approve for payroll, use Payroll."}
+        </p>
         <Card>
           <CardContent className="pt-6 pb-6">
             <TimesheetTable records={records} isAdmin={isAdmin} />

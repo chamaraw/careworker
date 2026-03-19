@@ -18,6 +18,9 @@ import {
   LogOut,
   Menu,
   ListTodo,
+  Banknote,
+  CreditCard,
+  Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -28,11 +31,14 @@ const navItems = [
   { href: "/roster", label: "Roster", icon: Calendar },
   { href: "/journal", label: "Journal", icon: BookOpen },
   { href: "/hours", label: "Hours", icon: Clock },
+  { href: "/my-pay", label: "My Pay", icon: Receipt },
   { href: "/incidents", label: "Incidents", icon: AlertTriangle },
   { href: "/follow-ups", label: "Follow-ups", icon: ListTodo },
   { href: "/service-users", label: "Service Users", icon: Users },
   { href: "/care-plans", label: "Care Plans", icon: FileText },
   { href: "/staff", label: "Staff", icon: UserCog, adminOnly: true },
+  { href: "/rate-cards", label: "Rate Cards", icon: CreditCard, adminOnly: true },
+  { href: "/payroll", label: "Payroll", icon: Banknote, adminOnly: true },
   { href: "/performance", label: "Performance", icon: BarChart3, adminOnly: true },
   { href: "/calendar", label: "Calendar Notes", icon: CalendarDays },
   { href: "/audit", label: "Audit Log", icon: ScrollText, adminOnly: true },

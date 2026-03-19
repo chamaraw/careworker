@@ -83,8 +83,7 @@ export function TimesheetTable({
         <TableHeader>
           <TableRow>
             {isAdmin && <TableHead className="text-base font-semibold">Worker</TableHead>}
-            <TableHead className="text-base font-semibold">Clock in</TableHead>
-            <TableHead className="text-base font-semibold">Clock out</TableHead>
+            <TableHead className="text-base font-semibold">Shift (start – end)</TableHead>
             <TableHead className="text-base font-semibold">Break</TableHead>
             <TableHead className="text-base font-semibold">Total</TableHead>
             {isAdmin && <TableHead className="text-base font-semibold">Status</TableHead>}
@@ -96,11 +95,15 @@ export function TimesheetTable({
             const clockIn = r.clockInAt instanceof Date ? r.clockInAt : new Date(r.clockInAt);
             const clockOut = r.clockOutAt ? (r.clockOutAt instanceof Date ? r.clockOutAt : new Date(r.clockOutAt)) : null;
             const total = r.totalMinutes != null ? `${(r.totalMinutes / 60).toFixed(1)} h` : "—";
+            const shiftLabel = clockOut
+              ? `${format(clockIn, "d MMM yyyy, HH:mm")} – ${format(clockOut, "HH:mm")}`
+              : `${format(clockIn, "d MMM yyyy, HH:mm")} – —`;
             return (
               <TableRow key={r.id} className="text-base">
                 {isAdmin && r.user && <TableCell className="font-medium">{r.user.name}</TableCell>}
-                <TableCell>{format(clockIn, "PPp")}</TableCell>
-                <TableCell>{clockOut ? format(clockOut, "PPp") : "—"}</TableCell>
+                <TableCell title={`Clock in: ${format(clockIn, "PPp")}${clockOut ? ` · Clock out: ${format(clockOut, "PPp")}` : ""}`}>
+                  {shiftLabel}
+                </TableCell>
                 <TableCell>{r.breakMinutes} min</TableCell>
                 <TableCell className="font-medium">{total}</TableCell>
                 {isAdmin && (

@@ -1,6 +1,6 @@
 -- Seed data for Neon PostgreSQL (FileyCare Worker)
--- Run after schema is applied: npx prisma db push   or   npx prisma migrate deploy
--- Execute in Neon SQL Editor, or: psql $DATABASE_URL -f prisma/seed.sql
+-- 1) Create tables first: run prisma/schema-neon.sql in Neon SQL Editor
+-- 2) Then run this file (seed.sql), or: psql $DATABASE_URL -f prisma/seed.sql
 -- Password for all seeded users: password123
 
 BEGIN;
@@ -8,12 +8,12 @@ BEGIN;
 -- Bcrypt hash for "password123" (10 rounds)
 INSERT INTO "User" (id, email, "passwordHash", name, phone, role, qualifications, active, "createdAt", "updatedAt")
 VALUES
-  ('seed_admin', 'admin@fileycare.com', '$2b$10$2Xbe3ls5LfhdIaLCYWk0SuU.E0rUhR9adzKQxffjqPVO0jeia1PDe', 'Admin User', NULL, 'ADMIN', NULL, true, NOW(), NOW()),
-  ('seed_w1', 'worker@fileycare.com', '$2b$10$2Xbe3ls5LfhdIaLCYWk0SuU.E0rUhR9adzKQxffjqPVO0jeia1PDe', 'Jane Care Worker', '07700 900000', 'CARE_WORKER', 'NVQ Level 2', true, NOW(), NOW()),
-  ('seed_w2', 'worker2@fileycare.com', '$2b$10$2Xbe3ls5LfhdIaLCYWk0SuU.E0rUhR9adzKQxffjqPVO0jeia1PDe', 'Bob Support', '07700 900002', 'CARE_WORKER', 'NVQ Level 3', true, NOW(), NOW()),
-  ('seed_w3', 'worker3@fileycare.com', '$2b$10$2Xbe3ls5LfhdIaLCYWk0SuU.E0rUhR9adzKQxffjqPVO0jeia1PDe', 'Priya Sharma', '07700 900003', 'CARE_WORKER', 'NVQ Level 2', true, NOW(), NOW()),
-  ('seed_w4', 'worker4@fileycare.com', '$2b$10$2Xbe3ls5LfhdIaLCYWk0SuU.E0rUhR9adzKQxffjqPVO0jeia1PDe', 'Mike Johnson', '07700 900004', 'CARE_WORKER', 'NVQ Level 3', true, NOW(), NOW()),
-  ('seed_w5', 'worker5@fileycare.com', '$2b$10$2Xbe3ls5LfhdIaLCYWk0SuU.E0rUhR9adzKQxffjqPVO0jeia1PDe', 'Sarah Williams', '07700 900005', 'CARE_WORKER', 'NVQ Level 2', true, NOW(), NOW())
+  ('seed_admin', 'admin@fileycare.com', '$2b$10$2Xbe3ls5LfhdIaLCYWk0SuU.E0rUhR9adzKQxffjqPVO0jeia1PDe', 'Admin User', NULL, 'ADMIN'::"Role", NULL, true, NOW(), NOW()),
+  ('seed_w1', 'worker@fileycare.com', '$2b$10$2Xbe3ls5LfhdIaLCYWk0SuU.E0rUhR9adzKQxffjqPVO0jeia1PDe', 'Jane Care Worker', '07700 900000', 'CARE_WORKER'::"Role", 'NVQ Level 2', true, NOW(), NOW()),
+  ('seed_w2', 'worker2@fileycare.com', '$2b$10$2Xbe3ls5LfhdIaLCYWk0SuU.E0rUhR9adzKQxffjqPVO0jeia1PDe', 'Bob Support', '07700 900002', 'CARE_WORKER'::"Role", 'NVQ Level 3', true, NOW(), NOW()),
+  ('seed_w3', 'worker3@fileycare.com', '$2b$10$2Xbe3ls5LfhdIaLCYWk0SuU.E0rUhR9adzKQxffjqPVO0jeia1PDe', 'Priya Sharma', '07700 900003', 'CARE_WORKER'::"Role", 'NVQ Level 2', true, NOW(), NOW()),
+  ('seed_w4', 'worker4@fileycare.com', '$2b$10$2Xbe3ls5LfhdIaLCYWk0SuU.E0rUhR9adzKQxffjqPVO0jeia1PDe', 'Mike Johnson', '07700 900004', 'CARE_WORKER'::"Role", 'NVQ Level 3', true, NOW(), NOW()),
+  ('seed_w5', 'worker5@fileycare.com', '$2b$10$2Xbe3ls5LfhdIaLCYWk0SuU.E0rUhR9adzKQxffjqPVO0jeia1PDe', 'Sarah Williams', '07700 900005', 'CARE_WORKER'::"Role", 'NVQ Level 2', true, NOW(), NOW())
 ON CONFLICT (email) DO UPDATE SET
   "passwordHash" = EXCLUDED."passwordHash",
   name = EXCLUDED.name,
@@ -44,7 +44,7 @@ SELECT
   (ARRAY['seed-property-1','seed-property-2','seed-property-1'])[1 + ((n - 1) % 3)],
   (CURRENT_DATE + ((n - 1) / 5) * INTERVAL '1 day') + TIME '08:00',
   (CURRENT_DATE + ((n - 1) / 5) * INTERVAL '1 day') + TIME '16:00',
-  CASE WHEN n <= 5 THEN 'COMPLETED' ELSE 'SCHEDULED' END,
+  (CASE WHEN n <= 5 THEN 'COMPLETED' ELSE 'SCHEDULED' END)::"ShiftStatus",
   'Care shift',
   NOW(),
   NOW()
@@ -57,7 +57,7 @@ SELECT
   'seed_journal_' || row_number() OVER (),
   s.id,
   s."careWorkerId",
-  'ROUTINE',
+  'ROUTINE'::"JournalCategory",
   'Care tasks completed. Client comfortable.',
   s."endAt",
   NOW()
@@ -65,32 +65,34 @@ FROM "Shift" s
 WHERE s.status = 'COMPLETED' AND s.id LIKE 'seed_shift_%'
 ON CONFLICT (id) DO NOTHING;
 
--- Time records for completed shifts
-INSERT INTO "TimeRecord" (id, "userId", "clockInAt", "clockOutAt", "breakMinutes", "totalMinutes", "approvalStatus", "createdAt", "updatedAt")
+-- Time records for completed shifts (property mandatory)
+INSERT INTO "TimeRecord" (id, "userId", "propertyId", "shiftType", "clockInAt", "clockOutAt", "breakMinutes", "totalMinutes", "approvalStatus", "createdAt", "updatedAt")
 SELECT
   'seed_time_' || row_number() OVER (),
   s."careWorkerId",
+  s."propertyId",
+  'STANDARD'::"ShiftType",
   s."startAt",
   s."endAt",
   30,
   450,
-  'APPROVED',
+  'APPROVED'::"TimeRecordApproval",
   NOW(),
   NOW()
 FROM "Shift" s
-WHERE s.status = 'COMPLETED' AND s.id LIKE 'seed_shift_%'
+WHERE s.status = 'COMPLETED' AND s.id LIKE 'seed_shift_%' AND s."propertyId" IS NOT NULL
 ON CONFLICT (id) DO NOTHING;
 
 -- Incidents
 INSERT INTO "IncidentReport" (id, "serviceUserId", "careWorkerId", severity, status, description, "actionTaken", "followUpNotes", "occurredAt", "createdAt", "updatedAt")
 VALUES
-  ('seed_incident_1', 'seed-service-user-1', 'seed_w1', 'LOW', 'RESOLVED', 'Minor trip in hallway. No injury.', 'Checked for injury, incident form completed.', 'Risk assessment reviewed.', NOW() - INTERVAL '2 days', NOW(), NOW()),
-  ('seed_incident_2', 'seed-service-user-2', 'seed_w3', 'LOW', 'RESOLVED', 'Medication given 10 min late. Noted.', 'Apology to family. Process reviewed.', 'No recurrence.', NOW() - INTERVAL '1 day', NOW(), NOW())
+  ('seed_incident_1', 'seed-service-user-1', 'seed_w1', 'LOW'::"IncidentSeverity", 'RESOLVED'::"IncidentStatus", 'Minor trip in hallway. No injury.', 'Checked for injury, incident form completed.', 'Risk assessment reviewed.', NOW() - INTERVAL '2 days', NOW(), NOW()),
+  ('seed_incident_2', 'seed-service-user-2', 'seed_w3', 'LOW'::"IncidentSeverity", 'RESOLVED'::"IncidentStatus", 'Medication given 10 min late. Noted.', 'Apology to family. Process reviewed.', 'No recurrence.', NOW() - INTERVAL '1 day', NOW(), NOW())
 ON CONFLICT (id) DO NOTHING;
 
 -- Care plan
 INSERT INTO "CarePlan" (id, "serviceUserId", title, goals, interventions, "reviewDate", status, "createdAt", "updatedAt")
-VALUES ('seed_careplan_1', 'seed-service-user-1', 'Personal care and mobility', 'Maintain independence with daily activities. Support mobility and medication.', 'Daily support with washing, dressing. Prompt medication. Encourage gentle exercise.', CURRENT_DATE + 90, 'ACTIVE', NOW(), NOW())
+VALUES ('seed_careplan_1', 'seed-service-user-1', 'Personal care and mobility', 'Maintain independence with daily activities. Support mobility and medication.', 'Daily support with washing, dressing. Prompt medication. Encourage gentle exercise.', CURRENT_DATE + 90, 'ACTIVE'::"CarePlanStatus", NOW(), NOW())
 ON CONFLICT (id) DO NOTHING;
 
 COMMIT;

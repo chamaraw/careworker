@@ -22,6 +22,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           user.passwordHash
         );
         if (!valid) return null;
+        await prisma.notification.deleteMany({
+          where: { userId: user.id, read: true },
+        });
         return {
           id: user.id,
           email: user.email,

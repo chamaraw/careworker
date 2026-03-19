@@ -51,6 +51,27 @@ export async function createIncident(data: {
     },
   });
   await logAudit({ userId: session.user.id, action: "CREATE", entity: "IncidentReport", entityId: report.id });
+
+  const serviceUser = await prisma.serviceUser.findUnique({
+    where: { id: data.serviceUserId },
+    select: { name: true },
+  });
+  const admins = await prisma.user.findMany({
+    where: { role: "ADMIN", active: true },
+    select: { id: true },
+  });
+  if (admins.length > 0) {
+    await prisma.notification.createMany({
+      data: admins.map((a) => ({
+        userId: a.id,
+        title: "Incident reported – requires attention",
+        message: `Severity: ${data.severity}. ${(data.description.trim().slice(0, 80))}${data.description.trim().length > 80 ? "…" : ""}${serviceUser?.name ? ` (${serviceUser.name})` : ""}`,
+        link: "/incidents",
+        createdById: session.user.id,
+      })),
+    });
+  }
+
   revalidatePath("/incidents");
   revalidatePath("/dashboard");
 }

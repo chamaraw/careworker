@@ -42,7 +42,7 @@ export function PerformanceTable({ rows }: { rows: WorkerPerformanceRow[] }) {
           <TableRow>
             <TableHead className="text-base font-semibold w-12">Rank</TableHead>
             <TableHead className="text-base font-semibold">Care worker</TableHead>
-            <TableHead className="text-base font-semibold">Venue</TableHead>
+            <TableHead className="text-base font-semibold">Property</TableHead>
             <TableHead className="text-base font-semibold text-right">Approved h</TableHead>
             <TableHead className="text-base font-semibold text-right">Expected h</TableHead>
             <TableHead className="text-base font-semibold text-right">Time variance</TableHead>

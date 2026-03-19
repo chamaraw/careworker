@@ -271,15 +271,18 @@ async function main() {
   const timeRecordCount = await prisma.timeRecord.count();
   if (timeRecordCount === 0) {
     const completedShiftsForTime = await prisma.shift.findMany({
-      where: { status: "COMPLETED" },
+      where: { status: "COMPLETED", propertyId: { not: null } },
     });
     for (const shift of completedShiftsForTime) {
+      if (!shift.propertyId) continue;
       const start = shift.startAt;
       const end = shift.endAt;
       const totalMins = Math.round((end.getTime() - start.getTime()) / 60000) - 30;
       await prisma.timeRecord.create({
         data: {
           userId: shift.careWorkerId,
+          propertyId: shift.propertyId,
+          shiftType: "STANDARD",
           clockInAt: start,
           clockOutAt: end,
           breakMinutes: 30,

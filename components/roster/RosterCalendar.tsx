@@ -145,7 +145,7 @@ export function RosterCalendar({
               </p>
               {selectedShift.property && (
                 <p>
-                  <span className="font-medium">Venue:</span>{" "}
+                  <span className="font-medium">Property:</span>{" "}
                   {selectedShift.property.name}
                 </p>
               )}

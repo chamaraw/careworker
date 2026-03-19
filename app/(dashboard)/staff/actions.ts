@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
+import type { ShiftType, RateType } from "@prisma/client";
 
 export async function getStaff() {
   const session = await auth();
@@ -57,6 +58,14 @@ export async function createStaff(data: {
   revalidatePath("/staff");
 }
 
+type RateOverrideInput = {
+  shiftType: ShiftType;
+  rateType: RateType;
+  hourlyRate: number | null;
+  fixedAmount: number | null;
+  bonusHours: number;
+};
+
 export async function updateStaff(
   id: string,
   data: Partial<{
@@ -64,6 +73,9 @@ export async function updateStaff(
     phone: string;
     qualifications: string;
     active: boolean;
+    hourlyRate: number | null;
+    rateCardId: string | null;
+    rateOverrides: RateOverrideInput[];
   }>
 ) {
   const session = await auth();
@@ -75,6 +87,30 @@ export async function updateStaff(
   if (data.phone !== undefined) update.phone = data.phone.trim() || null;
   if (data.qualifications !== undefined) update.qualifications = data.qualifications.trim() || null;
   if (data.active !== undefined) update.active = data.active;
+  if (data.hourlyRate !== undefined) update.hourlyRate = data.hourlyRate;
+  if (data.rateCardId !== undefined) update.rateCardId = data.rateCardId;
+
+  if (data.rateOverrides !== undefined) {
+    await prisma.$transaction([
+      prisma.userRateOverride.deleteMany({ where: { userId: id } }),
+      ...(data.rateOverrides.length > 0
+        ? [
+            prisma.userRateOverride.createMany({
+              data: data.rateOverrides.map((o) => ({
+                userId: id,
+                shiftType: o.shiftType,
+                rateType: o.rateType,
+                hourlyRate: o.hourlyRate,
+                fixedAmount: o.fixedAmount,
+                bonusHours: o.bonusHours ?? 0,
+              })),
+            }),
+          ]
+        : []),
+    ]);
+  }
+
   await prisma.user.update({ where: { id }, data: update });
   revalidatePath("/staff");
+  revalidatePath("/payroll");
 }

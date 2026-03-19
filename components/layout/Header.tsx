@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { NotificationBell } from "./NotificationBell";
 
 export async function Header() {
   const session = await auth();
@@ -11,9 +12,12 @@ export async function Header() {
     .join("")
     .toUpperCase()
     .slice(0, 2);
+  const isAdmin = (session.user as { role?: string }).role === "ADMIN";
+
   return (
     <header className="sticky top-0 z-30 flex h-14 min-h-[3.5rem] items-center justify-end gap-3 border-b border-[var(--border)] bg-[var(--background)]/95 backdrop-blur-sm px-4 safe-area-pt md:pl-6">
       <div className="flex items-center gap-3 text-[var(--muted-foreground)]">
+        <NotificationBell isAdmin={isAdmin} />
         <span className="text-[0.9375rem] font-medium hidden sm:inline truncate max-w-[8rem] md:max-w-none">{name}</span>
         <Avatar className="size-9 rounded-full border border-[var(--border)] shadow-[var(--shadow-soft)]">
           <AvatarFallback className="text-xs bg-[var(--primary)]/10 text-[var(--primary)] font-medium">

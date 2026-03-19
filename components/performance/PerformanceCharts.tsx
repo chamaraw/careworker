@@ -22,7 +22,7 @@ const CHART_COLORS = [
   "var(--chart-5)",
 ];
 
-/** Aggregate one row per worker (for charts). Uses first row per worker when multiple venues. */
+/** Aggregate one row per worker (for charts). Uses first row per worker when multiple properties. */
 function aggregateByWorker(rows: WorkerPerformanceRow[]): WorkerPerformanceRow[] {
   const byWorker = new Map<string, WorkerPerformanceRow>();
   for (const r of rows) {
@@ -33,12 +33,12 @@ function aggregateByWorker(rows: WorkerPerformanceRow[]): WorkerPerformanceRow[]
   );
 }
 
-/** Aggregate by venue for "across venues" chart. */
+/** Aggregate by property for "across properties" chart. */
 function aggregateByVenue(rows: WorkerPerformanceRow[]): { venueId: string; venueName: string; avgScore: number; totalHours: number; workers: number }[] {
   const byVenue = new Map<string, { venueName: string; scores: number[]; hours: number; workerIds: Set<string> }>();
   for (const r of rows) {
     const key = r.propertyId ?? "__none__";
-    const venueName = r.propertyName ?? "No venue";
+    const venueName = r.propertyName ?? "No property";
     if (!byVenue.has(key)) {
       byVenue.set(key, { venueName, scores: [], hours: 0, workerIds: new Set() });
     }
@@ -75,13 +75,13 @@ export function PerformanceCharts({
     <div className="space-y-8">
       {showVenueChart && venueData.length > 0 && (
         <div className="space-y-4">
-          <h3 className="section-title">Across venues</h3>
+          <h3 className="section-title">Across properties</h3>
           <p className="body-text-muted text-sm">
-            Compare venues. Select a venue in the filter above to drill down to workers at that venue.
+            Compare properties. Select a property in the filter above to drill down to workers at that property.
           </p>
           <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
             <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
-              <h4 className="text-sm font-semibold mb-4">Average performance score by venue</h4>
+              <h4 className="text-sm font-semibold mb-4">Average performance score by property</h4>
               <div className="h-[260px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
@@ -120,7 +120,7 @@ export function PerformanceCharts({
               </div>
             </div>
             <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
-              <h4 className="text-sm font-semibold mb-4">Total approved hours by venue</h4>
+              <h4 className="text-sm font-semibold mb-4">Total approved hours by property</h4>
               <div className="h-[260px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart

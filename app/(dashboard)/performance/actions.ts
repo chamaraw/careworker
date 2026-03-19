@@ -59,7 +59,7 @@ export async function getCareWorkers() {
   return list;
 }
 
-/** Admin only: performance stats per care worker, optionally filtered by worker and/or property (venue). */
+/** Admin only: performance stats per care worker, optionally filtered by worker and/or property. */
 export async function getPerformanceStats(filters: {
   workerId?: string;
   propertyId?: string;

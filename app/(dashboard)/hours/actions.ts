@@ -14,14 +14,17 @@ export async function getActiveTimeRecord(userId: string) {
   });
 }
 
-export async function clockIn() {
+export async function clockIn(propertyId: string, shiftType: import("@prisma/client").ShiftType = "STANDARD") {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
+  if (!propertyId) throw new Error("Property is required to clock in");
   const existing = await getActiveTimeRecord(session.user.id);
   if (existing) throw new Error("Already clocked in");
   const record = await prisma.timeRecord.create({
     data: {
       userId: session.user.id,
+      propertyId,
+      shiftType,
       clockInAt: new Date(),
     },
   });
@@ -63,6 +66,111 @@ export async function addBreak(minutes: number) {
   revalidatePath("/dashboard");
 }
 
+/** Admin only: get property from a shift for the given worker on the given date (for auto-fill in Add Hours). */
+export async function getShiftPropertyForWorkerDate(
+  userId: string,
+  dateStr: string
+): Promise<{ propertyId: string | null; propertyName: string | null }> {
+  const session = await auth();
+  if (!session?.user || (session.user as { role?: string }).role !== "ADMIN")
+    return { propertyId: null, propertyName: null };
+  const date = new Date(dateStr);
+  const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+  const shift = await prisma.shift.findFirst({
+    where: {
+      careWorkerId: userId,
+      startAt: { lt: dayEnd },
+      endAt: { gt: dayStart },
+      propertyId: { not: null },
+    },
+    include: { property: { select: { id: true, name: true } } },
+    orderBy: { startAt: "asc" },
+  });
+  if (!shift?.property) return { propertyId: null, propertyName: null };
+  return { propertyId: shift.property.id, propertyName: shift.property.name };
+}
+
+/** Admin only: create a time record manually for a worker. Starts as PENDING so it can be approved. */
+export async function createTimeRecordManual(data: {
+  userId: string;
+  clockInAt: Date;
+  clockOutAt: Date;
+  breakMinutes?: number;
+  notes?: string;
+  propertyId: string;
+  shiftType?: import("@prisma/client").ShiftType;
+}) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+  if ((session.user as { role?: string }).role !== "ADMIN")
+    throw new Error("Admin only");
+  if (!data.propertyId) throw new Error("Property is required");
+  const breakMinutes = data.breakMinutes ?? 0;
+  const totalMinutes = Math.max(
+    0,
+    differenceInMinutes(data.clockOutAt, data.clockInAt) - breakMinutes
+  );
+  const record = await prisma.timeRecord.create({
+    data: {
+      userId: data.userId,
+      propertyId: data.propertyId,
+      clockInAt: data.clockInAt,
+      clockOutAt: data.clockOutAt,
+      breakMinutes,
+      totalMinutes,
+      notes: data.notes ?? null,
+      approvalStatus: "PENDING",
+      shiftType: data.shiftType ?? "STANDARD",
+    },
+  });
+  await logAudit({
+    userId: session.user.id,
+    action: "CREATE",
+    entity: "TimeRecord",
+    entityId: record.id,
+    details: "manual entry",
+  });
+  revalidatePath("/hours");
+  revalidatePath("/dashboard");
+  revalidatePath("/payroll");
+}
+
+/** Admin only: list care workers for dropdowns (e.g. add hours). */
+export async function getCareWorkersForHours(): Promise<{ id: string; name: string }[]> {
+  const session = await auth();
+  if (!session?.user || (session.user as { role?: string }).role !== "ADMIN")
+    return [];
+  const users = await prisma.user.findMany({
+    where: { role: "CARE_WORKER", active: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+  return users;
+}
+
+/** Admin only: list properties for Add Hours dropdown. */
+export async function getPropertiesForHours(): Promise<{ id: string; name: string }[]> {
+  const session = await auth();
+  if (!session?.user || (session.user as { role?: string }).role !== "ADMIN")
+    return [];
+  return prisma.property.findMany({
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+}
+
+/** List properties for clock-in (any authenticated user). */
+export async function getPropertiesForClockIn(): Promise<{ id: string; name: string }[]> {
+  const session = await auth();
+  if (!session?.user?.id) return [];
+  return prisma.property.findMany({
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+}
+
 export async function getTimeRecords(filters: {
   userId?: string;
   dateFrom?: Date;
@@ -99,6 +207,25 @@ export async function setApproval(id: string, status: TimeRecordApproval) {
   });
   revalidatePath("/hours");
   revalidatePath("/dashboard");
+  revalidatePath("/payroll");
+}
+
+/** Admin only: approve all PENDING time records in the given week range. */
+export async function approveAllForWeek(weekStart: Date, weekEnd: Date) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if ((session.user as { role?: string }).role !== "ADMIN")
+    throw new Error("Admin only");
+  await prisma.timeRecord.updateMany({
+    where: {
+      clockInAt: { gte: weekStart, lte: weekEnd },
+      approvalStatus: "PENDING",
+    },
+    data: { approvalStatus: "APPROVED" },
+  });
+  revalidatePath("/hours");
+  revalidatePath("/dashboard");
+  revalidatePath("/payroll");
 }
 
 export async function updateTimeRecord(
