@@ -7,6 +7,9 @@ import { logAudit } from "@/lib/audit";
 import type { TimeRecordApproval } from "@prisma/client";
 import { differenceInMinutes } from "date-fns";
 
+/** Shift type for time records (matches Prisma ShiftType enum). */
+type ShiftTypeParam = "STANDARD" | "LONE_WORKING" | "SLEEP_NIGHT";
+
 export async function getActiveTimeRecord(userId: string) {
   return prisma.timeRecord.findFirst({
     where: { userId, clockOutAt: null },
@@ -14,7 +17,7 @@ export async function getActiveTimeRecord(userId: string) {
   });
 }
 
-export async function clockIn(propertyId: string, shiftType: import("@prisma/client").ShiftType = "STANDARD") {
+export async function clockIn(propertyId: string, shiftType: ShiftTypeParam = "STANDARD") {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
   if (!propertyId) throw new Error("Property is required to clock in");

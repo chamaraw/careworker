@@ -18,6 +18,7 @@ export default async function DashboardPage() {
   const weekStart = startOfWeek(new Date());
   const weekEnd = endOfWeek(new Date());
 
+  try {
   if (isAdmin) {
     const [staffCount, todayShifts, openIncidents, timeRecordsWeek] =
       await Promise.all([
@@ -224,4 +225,21 @@ export default async function DashboardPage() {
       </div>
     </div>
   );
+  } catch (err) {
+    console.error("Dashboard data error:", err);
+    return (
+      <div className="space-y-10">
+        <h1 className="page-title">Dashboard</h1>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-[var(--muted-foreground)]">
+              Could not load dashboard data. If you recently updated the database schema, run the
+              backfill script so all time records have a property set:{" "}
+              <code className="rounded bg-muted px-1.5 py-0.5 text-sm">npx tsx prisma/backfill-time-record-property.ts</code>
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 }
