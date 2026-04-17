@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useRegisterStaffAssistantPage } from "@/components/staff-assistant/staff-assistant-context";
+import { StaffAssistantFieldDraftButton } from "@/components/staff-assistant/StaffAssistantFieldDraftButton";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -19,7 +21,8 @@ import type { ShiftType, RateType } from "@prisma/client";
 const SHIFT_TYPES: { value: ShiftType; label: string }[] = [
   { value: "STANDARD", label: "Standard" },
   { value: "LONE_WORKING", label: "Lone working" },
-  { value: "SLEEP_NIGHT", label: "Sleep night" },
+  { value: "AWAKE_NIGHT", label: "Awake night (hourly)" },
+  { value: "SLEEP_NIGHT", label: "Sleep night (fixed)" },
 ];
 
 type User = {
@@ -75,6 +78,57 @@ export function StaffEditForm({
   });
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+
+  const assistantReg = useMemo(
+    () => ({
+      flowId: "staff_edit",
+      fields: [
+        {
+          id: "rateCard",
+          label: "Rate card",
+          whatGoodLooksLike: "Named pay package when this worker should follow standard rules.",
+        },
+        {
+          id: "hourlyRate",
+          label: "Fallback hourly rate",
+          whatGoodLooksLike: "£/hr used when no card or override applies.",
+        },
+        {
+          id: "qualifications",
+          label: "Qualifications",
+          insertable: true,
+          whatGoodLooksLike: "Brief professional qualifications only.",
+        },
+        {
+          id: "active",
+          label: "Active",
+          whatGoodLooksLike: "Off when they must not log in or be assigned shifts.",
+        },
+      ],
+      getShareablePreview: () =>
+        JSON.stringify(
+          {
+            name: name.trim(),
+            phone: phone.trim() || null,
+            qualifications: qualifications.trim() || null,
+            active,
+            hourlyRate: hourlyRate.trim() || null,
+            rateCardId: rateCardId || null,
+            rateOverrides: overrides.map((o) => ({
+              shiftType: o.shiftType,
+              rateType: o.rateType,
+              hourlyRate: o.hourlyRate.trim() || null,
+              fixedAmount: o.fixedAmount.trim() || null,
+              bonusHours: o.bonusHours.trim() || null,
+            })),
+          },
+          null,
+          2
+        ),
+    }),
+    [name, phone, qualifications, active, hourlyRate, rateCardId, overrides]
+  );
+  useRegisterStaffAssistantPage("staff-edit-form", assistantReg);
 
   function setOverride(shiftType: ShiftType, field: string, value: string | RateType) {
     setOverrides((prev) =>
@@ -150,7 +204,14 @@ export function StaffEditForm({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="qualifications">Qualifications</Label>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Label htmlFor="qualifications">Qualifications</Label>
+          <StaffAssistantFieldDraftButton
+            fieldId="qualifications"
+            label="Qualifications"
+            onApply={setQualifications}
+          />
+        </div>
         <Input
           id="qualifications"
           value={qualifications}

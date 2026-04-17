@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useRegisterStaffAssistantPage } from "@/components/staff-assistant/staff-assistant-context";
+import { StaffAssistantFieldDraftButton } from "@/components/staff-assistant/StaffAssistantFieldDraftButton";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -51,6 +53,41 @@ export function IncidentForm({
   const [actionTaken, setActionTaken] = useState("");
   const [followUpNotes, setFollowUpNotes] = useState("");
   const [error, setError] = useState("");
+
+  const assistantReg = useMemo(
+    () => ({
+      flowId: "incidents",
+      fields: [
+        {
+          id: "description",
+          label: "What happened",
+          required: true,
+          insertable: true,
+          whatGoodLooksLike: "Chronological facts: time, place, people involved, immediate risks.",
+        },
+        {
+          id: "actionTaken",
+          label: "Action taken",
+          insertable: true,
+          whatGoodLooksLike: "What was done to keep people safe, who was informed, and when.",
+        },
+      ],
+      getShareablePreview: () =>
+        JSON.stringify(
+          {
+            serviceUserId: serviceUserId || null,
+            severity,
+            description: description.slice(0, 4000),
+            actionTaken: actionTaken.slice(0, 2000),
+            followUpNotes: followUpNotes.slice(0, 2000),
+          },
+          null,
+          2
+        ),
+    }),
+    [serviceUserId, severity, description, actionTaken, followUpNotes]
+  );
+  useRegisterStaffAssistantPage("incident-form-dialog", assistantReg);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -121,7 +158,14 @@ export function IncidentForm({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>What happened?</Label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label>What happened?</Label>
+              <StaffAssistantFieldDraftButton
+                fieldId="incident_description"
+                label="Incident description"
+                onApply={setDescription}
+              />
+            </div>
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -131,7 +175,10 @@ export function IncidentForm({
             />
           </div>
           <div className="space-y-2">
-            <Label>Action taken (optional)</Label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label>Action taken (optional)</Label>
+              <StaffAssistantFieldDraftButton fieldId="action_taken" label="Action taken" onApply={setActionTaken} />
+            </div>
             <Textarea
               value={actionTaken}
               onChange={(e) => setActionTaken(e.target.value)}

@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useRegisterStaffAssistantPage } from "@/components/staff-assistant/staff-assistant-context";
+import { StaffAssistantFieldDraftButton } from "@/components/staff-assistant/StaffAssistantFieldDraftButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +26,56 @@ export function StaffForm() {
   const [qualifications, setQualifications] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+
+  const assistantReg = useMemo(
+    () => ({
+      flowId: "staff_list",
+      fields: [
+        {
+          id: "name",
+          label: "Name",
+          required: true,
+          whatGoodLooksLike: "Full name as it should appear on rosters and in the app.",
+        },
+        {
+          id: "email",
+          label: "Email",
+          required: true,
+          whatGoodLooksLike: "A unique address they can access — this is their username.",
+        },
+        {
+          id: "password",
+          label: "Password",
+          required: true,
+          whatGoodLooksLike: "At least 8 characters. They can change it after first login.",
+        },
+        {
+          id: "phone",
+          label: "Phone",
+          whatGoodLooksLike: "Optional UK number for shift contact.",
+        },
+        {
+          id: "qualifications",
+          label: "Qualifications",
+          insertable: true,
+          whatGoodLooksLike: "Short factual list (e.g. NVQ, medication training) — not a care narrative.",
+        },
+      ],
+      getShareablePreview: () =>
+        JSON.stringify(
+          {
+            name: name.trim(),
+            email: email.trim(),
+            phone: phone.trim() || null,
+            qualifications: qualifications.trim() || null,
+          },
+          null,
+          2
+        ),
+    }),
+    [name, email, phone, qualifications]
+  );
+  useRegisterStaffAssistantPage("staff-create-dialog", open ? assistantReg : null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -115,7 +167,14 @@ export function StaffForm() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="qualifications">Qualifications</Label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label htmlFor="qualifications">Qualifications</Label>
+              <StaffAssistantFieldDraftButton
+                fieldId="qualifications"
+                label="Qualifications"
+                onApply={setQualifications}
+              />
+            </div>
             <Input
               id="qualifications"
               value={qualifications}

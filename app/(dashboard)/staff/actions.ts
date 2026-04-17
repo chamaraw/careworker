@@ -114,3 +114,50 @@ export async function updateStaff(
   revalidatePath("/staff");
   revalidatePath("/payroll");
 }
+
+export async function setUserCompetencyProfiles(userId: string, competencyProfileIds: string[]) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+  if ((session.user as { role?: string }).role !== "ADMIN") throw new Error("Admin only");
+  const user = await prisma.user.findFirst({ where: { id: userId, role: "CARE_WORKER" } });
+  if (!user) throw new Error("Staff not found");
+  const unique = Array.from(new Set(competencyProfileIds));
+  if (unique.length > 0) {
+    const found = await prisma.competencyProfile.findMany({
+      where: { id: { in: unique }, isActive: true },
+      select: { id: true },
+    });
+    if (found.length !== unique.length) throw new Error("One or more competency profiles are invalid.");
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.userCompetencyProfile.deleteMany({ where: { userId } });
+    for (const competencyProfileId of unique) {
+      await tx.userCompetencyProfile.create({ data: { userId, competencyProfileId } });
+    }
+  });
+  revalidatePath("/staff");
+  revalidatePath(`/staff/${userId}/edit`);
+  revalidatePath("/audits/workforce");
+}
+
+export async function getCompetencyProfilesForStaffSelect() {
+  const session = await auth();
+  if (!session?.user?.id) return [];
+  if ((session.user as { role?: string }).role !== "ADMIN") return [];
+  return prisma.competencyProfile.findMany({
+    where: { isActive: true },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, slug: true, description: true },
+  });
+}
+
+export async function getUserCompetencyProfileIds(userId: string) {
+  const session = await auth();
+  if (!session?.user?.id) return [];
+  if ((session.user as { role?: string }).role !== "ADMIN") return [];
+  const rows = await prisma.userCompetencyProfile.findMany({
+    where: { userId },
+    select: { competencyProfileId: true },
+  });
+  return rows.map((r) => r.competencyProfileId);
+}

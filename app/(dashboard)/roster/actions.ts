@@ -4,24 +4,50 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { logAudit } from "@/lib/audit";
-import type { ShiftStatus } from "@prisma/client";
+import type { Prisma, ShiftStatus } from "@prisma/client";
+import { getEffectiveAuditTemplatesForRecording } from "@/lib/audit-effective-templates";
+import { auditTemplateLooksTwiceDaily, countSubmissionsTodayLondon } from "@/lib/audit-reminders";
 
-export async function getShifts(
-  start: Date,
-  end: Date,
-  careWorkerId?: string,
-  propertyId?: string | null
-) {
+/** Multi-select roster filters (AND between dimensions). Empty arrays = no filter on that axis. */
+export type RosterCalendarFilters = {
+  propertyIds?: string[];
+  careWorkerIds?: string[];
+  serviceUserIds?: string[];
+};
+
+export async function getShifts(start: Date, end: Date, filters?: RosterCalendarFilters) {
   const session = await auth();
   if (!session?.user?.id) return [];
   const isAdmin = (session.user as { role?: string }).role === "ADMIN";
+
+  const propertyIds = (filters?.propertyIds ?? []).filter(Boolean);
+  const careWorkerIds = isAdmin ? (filters?.careWorkerIds ?? []).filter(Boolean) : [];
+  const serviceUserIds = (filters?.serviceUserIds ?? []).filter(Boolean);
+
+  const where: Prisma.ShiftWhereInput = {
+    startAt: { lte: end },
+    endAt: { gte: start },
+  };
+
+  if (!isAdmin) {
+    where.careWorkerId = session.user.id;
+  } else if (careWorkerIds.length > 0) {
+    where.careWorkerId = { in: careWorkerIds };
+  }
+
+  if (serviceUserIds.length > 0) {
+    where.serviceUserId = { in: serviceUserIds };
+  }
+
+  if (propertyIds.length > 0) {
+    where.OR = [
+      { propertyId: { in: propertyIds } },
+      { propertyId: null, serviceUser: { propertyId: { in: propertyIds } } },
+    ];
+  }
+
   const shifts = await prisma.shift.findMany({
-    where: {
-      startAt: { lte: end },
-      endAt: { gte: start },
-      ...(propertyId != null && propertyId !== "" ? { propertyId } : {}),
-      ...(!isAdmin && careWorkerId !== session.user.id ? { careWorkerId: session.user.id } : careWorkerId ? { careWorkerId } : {}),
-    },
+    where,
     include: {
       careWorker: { select: { id: true, name: true } },
       serviceUser: { select: { id: true, name: true } },
@@ -77,7 +103,7 @@ export async function updateShift(
     careWorkerId?: string;
     serviceUserId?: string;
     propertyId?: string | null;
-    notes?: string;
+    notes?: string | null;
   }
 ) {
   const session = await auth();
@@ -145,7 +171,7 @@ export async function getShiftContextNotes(serviceUserId: string) {
   const [serviceUser, journalEntries, followUpActions] = await Promise.all([
     prisma.serviceUser.findUnique({
       where: { id: serviceUserId },
-      select: { name: true, medicalNotes: true, allergies: true },
+      select: { id: true, name: true, medicalNotes: true, allergies: true, propertyId: true },
     }),
     prisma.journalEntry.findMany({
       where: { shift: { serviceUserId } },
@@ -166,9 +192,54 @@ export async function getShiftContextNotes(serviceUserId: string) {
       take: 20,
     }),
   ]);
+
+  let auditsDueToday:
+    | {
+        templateId: string;
+        templateName: string;
+        neededToday: number;
+        haveToday: number;
+        openPath: string;
+      }[]
+    | null = null;
+
+  if (serviceUser?.propertyId) {
+    const [effective, recentSubs] = await Promise.all([
+      getEffectiveAuditTemplatesForRecording(serviceUser.propertyId, serviceUserId, { includeFields: true }),
+      prisma.auditFormSubmission.findMany({
+        where: {
+          serviceUserId,
+          propertyId: serviceUser.propertyId,
+          status: "SUBMITTED",
+          createdAt: { gte: new Date(Date.now() - 40 * 60 * 60 * 1000) },
+        },
+        select: { serviceUserId: true, formTemplateId: true, createdAt: true },
+      }),
+    ]);
+
+    const now = new Date();
+    auditsDueToday = effective
+      .map((t) => {
+        const twice = auditTemplateLooksTwiceDaily(t.name, t.fields ?? []);
+        const needed = twice ? 2 : 1;
+        const have = countSubmissionsTodayLondon(recentSubs, serviceUserId, t.id, now);
+        return {
+          templateId: t.id,
+          templateName: t.name,
+          neededToday: needed,
+          haveToday: have,
+          openPath: `/audits/submit/${t.id}?propertyId=${encodeURIComponent(
+            serviceUser.propertyId!
+          )}&serviceUserId=${encodeURIComponent(serviceUserId)}`,
+        };
+      })
+      .filter((x) => x.haveToday < x.neededToday)
+      .sort((a, b) => a.templateName.localeCompare(b.templateName));
+  }
   return {
     serviceUser,
     journalEntries,
     followUpActions,
+    auditsDueToday,
   };
 }

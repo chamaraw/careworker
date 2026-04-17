@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pencil, Trash2 } from "lucide-react";
-import { deleteJournalEntry } from "@/app/(dashboard)/journal/actions";
+import { deleteJournalEntry } from "@/app/(dashboard)/notes/actions";
 import { toast } from "sonner";
 import { EditJournalEntryDialog } from "./EditJournalEntryDialog";
 
@@ -38,7 +38,7 @@ export function JournalTimeline({
   }
 
   function handleDelete(id: string) {
-    if (!confirm("Delete this journal entry? This cannot be undone.")) return;
+    if (!confirm("Delete this note? This cannot be undone.")) return;
     startTransition(async () => {
       try {
         await deleteJournalEntry(id);
@@ -53,7 +53,7 @@ export function JournalTimeline({
   if (entries.length === 0) {
     return (
       <p className="body-text-muted py-8 text-center">
-        No journal entries match your filters.
+        No notes match your filters.
       </p>
     );
   }

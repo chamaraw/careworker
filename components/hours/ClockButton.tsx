@@ -7,18 +7,23 @@ import { Clock, Square } from "lucide-react";
 import { clockOut } from "@/app/(dashboard)/hours/actions";
 import { toast } from "sonner";
 
+type ClockButtonProps = {
+  isClockedIn: boolean;
+  onSuccess?: () => void;
+  /** Opens clock-in dialog (property + shift type) instead of calling API directly. */
+  whenNotClockedInClick?: () => void;
+  /** Opens clock-out confirmation with large time display instead of immediate clock-out. */
+  whenClockedInClick?: () => void;
+  disabled?: boolean;
+};
+
 export function ClockButton({
   isClockedIn,
   onSuccess,
   whenNotClockedInClick,
+  whenClockedInClick,
   disabled,
-}: {
-  isClockedIn: boolean;
-  onSuccess?: () => void;
-  /** When set, clicking "Clock in" calls this instead of clockIn() (e.g. open a dialog to pick property). */
-  whenNotClockedInClick?: () => void;
-  disabled?: boolean;
-}) {
+}: ClockButtonProps) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -29,6 +34,10 @@ export function ClockButton({
       } else {
         toast.error("Clock-in requires a property. Use the Hours page to clock in.");
       }
+      return;
+    }
+    if (whenClockedInClick) {
+      whenClockedInClick();
       return;
     }
     startTransition(() => {

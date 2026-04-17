@@ -35,7 +35,8 @@ import type { ShiftType, RateType } from "@prisma/client";
 const SHIFT_TYPES: { value: ShiftType; label: string }[] = [
   { value: "STANDARD", label: "Standard" },
   { value: "LONE_WORKING", label: "Lone working" },
-  { value: "SLEEP_NIGHT", label: "Sleep night" },
+  { value: "AWAKE_NIGHT", label: "Awake night (hourly)" },
+  { value: "SLEEP_NIGHT", label: "Sleep night (fixed)" },
 ];
 
 type RuleRow = {

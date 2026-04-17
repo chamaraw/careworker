@@ -72,9 +72,9 @@ export function resolveRate(user: UserWithRates, shiftType: ShiftType): Resolved
 
 /**
  * Calculate pay for a time record given resolved rate and hours.
- * - HOURLY (STANDARD): hours * hourlyRate
+ * - HOURLY (STANDARD, AWAKE_NIGHT, or LONE_WORKING): hours * hourlyRate [+ bonus]
  * - HOURLY + bonus (e.g. LONE_WORKING): hours * hourlyRate + bonusHours * hourlyRate
- * - FIXED (e.g. SLEEP_NIGHT): fixedAmount (ignores hours)
+ * - FIXED (SLEEP_NIGHT – sleep at unit): fixedAmount (ignores hours)
  */
 export function calculatePay(rate: ResolvedRate, totalHours: number): number {
   if (rate.rateType === "FIXED" && rate.fixedAmount != null) {

@@ -4,9 +4,16 @@ import { startOfDay, endOfDay, startOfWeek, endOfWeek, format } from "date-fns";
 import Link from "next/link";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { QuickActions } from "@/components/dashboard/QuickActions";
+import { WorkerHoursSection } from "@/components/dashboard/WorkerHoursSection";
+import { WorkerDashboardView, type WorkerCompetencyRow } from "@/components/dashboard/WorkerDashboardView";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Users, Calendar, AlertTriangle, Clock } from "lucide-react";
+import {
+  ensureMyCompetencyNotifications,
+  getMyCompetencySummaryForWorker,
+  getWorkerDashboardAuditReminders,
+} from "../audits/actions";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -44,6 +51,8 @@ export default async function DashboardPage() {
             clockInAt: { gte: weekStart, lte: weekEnd },
             approvalStatus: "APPROVED",
           },
+          // Only totals — avoids SELECTing newer columns before DB migration (e.g. offRosterReason).
+          select: { totalMinutes: true },
         }),
       ]);
     const totalMinutes = timeRecordsWeek.reduce(
@@ -121,7 +130,7 @@ export default async function DashboardPage() {
   }
 
   // Care worker view
-  const [myShiftsToday, recentJournal, myHoursWeek] = await Promise.all([
+  const [myShiftsToday, recentJournal, myHoursWeek, auditReminders, competencySummary] = await Promise.all([
     prisma.shift.findMany({
       where: {
         careWorkerId: userId,
@@ -129,7 +138,10 @@ export default async function DashboardPage() {
         endAt: { gte: todayStart },
         status: { not: "CANCELLED" },
       },
-      include: { serviceUser: { select: { name: true } } },
+      include: {
+        serviceUser: { select: { name: true, property: { select: { name: true } } } },
+        property: { select: { name: true } },
+      },
       orderBy: { startAt: "asc" },
     }),
     prisma.journalEntry.findMany({
@@ -143,7 +155,22 @@ export default async function DashboardPage() {
         userId,
         clockInAt: { gte: weekStart, lte: weekEnd },
       },
+      select: { totalMinutes: true },
     }),
+    getWorkerDashboardAuditReminders(userId),
+    (async () => {
+      try {
+        await ensureMyCompetencyNotifications(userId);
+        return await getMyCompetencySummaryForWorker(userId);
+      } catch {
+        return {
+          expiredCount: 0,
+          expiringCount: 0,
+          missingCount: 0,
+          items: [] as WorkerCompetencyRow[],
+        };
+      }
+    })(),
   ]);
   const myTotalMinutes = myHoursWeek.reduce(
     (sum, r) => sum + (r.totalMinutes ?? 0),
@@ -152,78 +179,31 @@ export default async function DashboardPage() {
   const myHoursText = (myTotalMinutes / 60).toFixed(1);
 
   return (
-    <div className="space-y-10">
-      <div>
-        <h1 className="page-title">Dashboard</h1>
-        <p className="body-text-muted mt-1">
-          Welcome back, {session.user.name ?? session.user.email}.
-        </p>
-      </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        <StatCard
-          title="My shifts today"
-          value={myShiftsToday.length}
-          icon={Calendar}
-        />
-        <StatCard
-          title="Hours this week"
-          value={myHoursText}
-          icon={Clock}
-        />
-      </div>
-      <QuickActions />
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="section-title">My shifts today</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {myShiftsToday.length === 0 ? (
-              <p className="body-text-muted">No shifts today.</p>
-            ) : (
-              <ul className="space-y-3">
-                {myShiftsToday.map((shift) => (
-                  <li
-                    key={shift.id}
-                    className="flex justify-between items-center py-3 border-b border-[var(--border)] last:border-0"
-                  >
-                    <span className="font-semibold text-[var(--foreground)]">{shift.serviceUser.name}</span>
-                    <span className="body-text-muted">
-                      {format(shift.startAt, "HH:mm")}–{format(shift.endAt, "HH:mm")}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="section-title">Recent journal entries</CardTitle>
-            <Link href="/journal">
-              <Button variant="ghost" size="sm" className="min-h-[44px]">View all</Button>
-            </Link>
-          </CardHeader>
-          <CardContent>
-            {recentJournal.length === 0 ? (
-              <p className="body-text-muted">No recent entries.</p>
-            ) : (
-              <ul className="space-y-3">
-                {recentJournal.map((entry) => (
-                  <li
-                    key={entry.id}
-                    className="py-3 border-b border-[var(--border)] last:border-0 body-text"
-                  >
-                    <span className="font-semibold">{entry.shift.serviceUser.name}</span>
-                    {" "}— {entry.category} — {format(entry.recordedAt, "MMM d, HH:mm")}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+    <WorkerDashboardView
+      userName={session.user.name ?? session.user.email ?? "Colleague"}
+      shiftsToday={myShiftsToday.map((s) => ({
+        id: s.id,
+        startAt: s.startAt.toISOString(),
+        endAt: s.endAt.toISOString(),
+        serviceUserName: s.serviceUser.name,
+        venueLabel: s.property?.name ?? s.serviceUser.property?.name ?? null,
+      }))}
+      recentJournal={recentJournal.map((e) => ({
+        id: e.id,
+        serviceUserName: e.shift.serviceUser.name,
+        category: String(e.category),
+        recordedAt: e.recordedAt.toISOString(),
+      }))}
+      hoursThisWeek={myHoursText}
+      auditReminders={auditReminders}
+      competencyBanner={{
+        expiredCount: competencySummary.expiredCount,
+        expiringCount: competencySummary.expiringCount,
+        missingCount: competencySummary.missingCount,
+      }}
+      competencyRows={competencySummary.items}
+      hoursSection={<WorkerHoursSection userId={userId} auditReminders={auditReminders} />}
+    />
   );
   } catch (err) {
     console.error("Dashboard data error:", err);

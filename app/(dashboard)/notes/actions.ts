@@ -60,7 +60,7 @@ export async function createJournalEntry(data: {
     },
   });
   await logAudit({ userId: session.user.id, action: "CREATE", entity: "JournalEntry", entityId: entry.id });
-  revalidatePath("/journal");
+  revalidatePath("/notes");
   revalidatePath("/dashboard");
 }
 
@@ -124,7 +124,7 @@ export async function updateJournalEntry(
     },
   });
   await logAudit({ userId: session.user.id, action: "UPDATE", entity: "JournalEntry", entityId: id });
-  revalidatePath("/journal");
+  revalidatePath("/notes");
   revalidatePath("/dashboard");
 }
 
@@ -139,6 +139,6 @@ export async function deleteJournalEntry(id: string) {
     throw new Error("You can only delete your own journal entries");
   await prisma.journalEntry.delete({ where: { id } });
   await logAudit({ userId: session.user.id, action: "DELETE", entity: "JournalEntry", entityId: id });
-  revalidatePath("/journal");
+  revalidatePath("/notes");
   revalidatePath("/dashboard");
 }

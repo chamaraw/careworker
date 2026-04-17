@@ -33,7 +33,7 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: "FileyCare Worker",
-  description: "Care worker scheduler and journal",
+  description: "Care worker scheduler and notes",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

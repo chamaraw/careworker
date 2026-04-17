@@ -41,7 +41,7 @@ export function JournalFilters({
     if (dateTo) params.set("dateTo", dateTo);
     if (worker) params.set("worker", worker);
     if (serviceUser) params.set("serviceUser", serviceUser);
-    router.push(`/journal?${params.toString()}`);
+    router.push(`/notes?${params.toString()}`);
   }
 
   return (

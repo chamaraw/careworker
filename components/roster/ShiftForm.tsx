@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useRegisterStaffAssistantPage } from "@/components/staff-assistant/staff-assistant-context";
+import { StaffAssistantFieldDraftButton } from "@/components/staff-assistant/StaffAssistantFieldDraftButton";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,6 +69,47 @@ export function ShiftForm({
   const [endAt, setEndAt] = useState(format(endDate, "yyyy-MM-dd'T'HH:mm"));
   const [notes, setNotes] = useState(initialNotes ?? "");
   const [error, setError] = useState("");
+
+  const assistantReg = useMemo(
+    () => ({
+      flowId: "roster",
+      fields: [
+        {
+          id: "notes",
+          label: "Shift notes",
+          insertable: true,
+          whatGoodLooksLike: "Factual, contemporaneous notes — who was present, tasks, risks, handover points.",
+        },
+        {
+          id: "startAt",
+          label: "Start",
+          required: true,
+          whatGoodLooksLike: "Local date/time matching the real visit start.",
+        },
+        {
+          id: "endAt",
+          label: "End",
+          required: true,
+          whatGoodLooksLike: "Must be after start; adjust if the visit overran.",
+        },
+      ],
+      getShareablePreview: () =>
+        JSON.stringify(
+          {
+            careWorkerId: careWorkerId || null,
+            serviceUserId: serviceUserId || null,
+            propertyId: propertyId || null,
+            startAt,
+            endAt,
+            notes: notes.slice(0, 4000),
+          },
+          null,
+          2
+        ),
+    }),
+    [careWorkerId, serviceUserId, propertyId, startAt, endAt, notes]
+  );
+  useRegisterStaffAssistantPage("shift-form-dialog", assistantReg);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -209,11 +252,18 @@ export function ShiftForm({
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Notes</Label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label>Notes</Label>
+              <StaffAssistantFieldDraftButton fieldId="shift_notes" label="Shift notes" onApply={setNotes} />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Large box for typing or Apple Pencil / handwriting on iPad.
+            </p>
             <Textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="min-h-[80px]"
+              autoComplete="off"
+              className="min-h-[180px] text-lg leading-relaxed touch-pan-y touch-manipulation resize-y p-4 input-text-base border-2 border-sky-200/70 focus-visible:border-[#005EB8] dark:border-sky-800/50"
             />
           </div>
           <div className="flex gap-2">

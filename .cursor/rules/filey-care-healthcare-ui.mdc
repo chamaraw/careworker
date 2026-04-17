@@ -1,0 +1,36 @@
+---
+description: Filey Care Worker — NHS-style healthcare UI, clock/hours, UK holidays, shift notes
+alwaysApply: true
+---
+
+# Filey Care — Healthcare UI & Product Conventions
+
+## Visual identity (care-worker facing)
+
+- Use an **NHS-inspired** palette for worker dashboards and primary healthcare surfaces: **blue** `#005EB8` / darker blues for heroes and CTAs, **teal/aqua** `#00A499` and **green** `#007F3B` for positive stats, **pale grey** `#E8EDEE` for bands and borders. Keep contrast readable (WCAG-aware).
+- **Worker dashboard** is implemented in `components/dashboard/WorkerDashboardView.tsx` — preserve the hero gradient, colour-coded stat tiles, and structured cards when extending. Do not revert to a plain grey dashboard for care workers without explicit product ask.
+
+## Clock in / out & Hours
+
+- **Large, live date & time** are a first-class UX: use `components/hours/LiveDateTimeDisplay.tsx` (`variant="hero"` in dialogs, `variant="onDark"` on blue hero bands).
+- **Clock in**: `ClockInDialog` + property + shift type.
+- **Clock out**: `ClockOutDialog` with big clock + confirm (not silent clock-out from the Hours page).
+- **Hours & clock (care workers)** live on the **dashboard** (`#worker-hours`): one live time chip in the hero (`LiveDateTimeDisplay` `onDarkCompact`); avoid a second large clock in the hours block; `/hours` redirects there. Admins use **Payroll** for timesheets.
+- Keep **touch-friendly** controls: large buttons (`min-h-[44px]`+), `touch-manipulation` where appropriate.
+
+## Roster / shift “events” & notes
+
+- Shift notes use **native `<Textarea>`** (not canvas) so **iPad / Apple Pencil** and system handwriting work in Safari: **large min-height**, `text-lg`, `touch-pan-y`, clear borders, `input-text-base` (16px+) to avoid iOS zoom.
+- **Quick notes** on shift click: `components/roster/ShiftQuickNotes.tsx` — admins and **assigned care worker** can edit; others read-only.
+- **Shift form** (`components/roster/ShiftForm.tsx`): same large-note pattern for create/edit.
+
+## UK public holidays & rates
+
+- UK holiday detection merges **GB-ENG, GB-SCT, GB-NIR, GB-WLS** via `lib/uk-bank-holidays.ts` (type `public` only).
+- **Calendar** highlights UK public holidays; **Holiday rates** (`/rates`) shows a reference table + configured multipliers.
+- Payroll/slip logic uses `HolidayRateBoost` + holiday multiplier by date — keep schema and actions in sync when changing pay rules.
+
+## Do not regress
+
+- Do not remove live clock from clock flows without replacing with an equivalent obvious “now” display.
+- Do not shrink shift note areas below ~**`min-h-[180px]`–`200px`** for primary note fields on tablet workflows.

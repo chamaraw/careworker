@@ -20,6 +20,7 @@ import { Plus, Pencil, Trash2, CreditCard } from "lucide-react";
 const SHIFT_LABELS: Record<string, string> = {
   STANDARD: "Standard",
   LONE_WORKING: "Lone working",
+  AWAKE_NIGHT: "Awake night",
   SLEEP_NIGHT: "Sleep night",
 };
 

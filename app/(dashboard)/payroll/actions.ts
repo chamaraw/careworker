@@ -2,9 +2,11 @@
 
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { format } from "date-fns";
+import { endOfDay, format, startOfDay } from "date-fns";
 import { getWeekBounds, type PayrollDay, type PayrollWorker } from "@/lib/payroll";
 import { resolveRate, calculatePay } from "@/lib/rate-calc";
+import { getUkBankHolidayNameMapInRange } from "@/lib/uk-bank-holidays";
+import { timeRecordCoreSelect } from "@/lib/time-record-core-select";
 
 export type { PayrollDay, PayrollWorker } from "@/lib/payroll";
 
@@ -22,7 +24,7 @@ export async function getPayrollForWeek(referenceDate: Date): Promise<{
 
   const { weekStart, weekEnd } = getWeekBounds(referenceDate);
 
-  const [careWorkers, timeRecords] = await Promise.all([
+  const [careWorkers, timeRecords, holidayBoosts] = await Promise.all([
     prisma.user.findMany({
       where: { role: "CARE_WORKER", active: true },
       select: {
@@ -42,20 +44,44 @@ export async function getPayrollForWeek(referenceDate: Date): Promise<{
         approvalStatus: "APPROVED",
         user: { role: "CARE_WORKER" },
       },
-      include: {
+      select: {
+        ...timeRecordCoreSelect,
         user: { select: { id: true } },
         property: { select: { id: true, name: true } },
       },
       orderBy: { clockInAt: "asc" },
     }),
+    prisma.holidayRateBoost.findMany({
+      where: {
+        date: {
+          gte: startOfDay(weekStart),
+          lte: endOfDay(weekEnd),
+        },
+      },
+      select: { date: true, multiplier: true },
+      orderBy: { date: "asc" },
+    }),
   ]);
+
+  const holidayMultiplierByDateKey = new Map<string, number>(
+    holidayBoosts.map((b) => [format(b.date, "yyyy-MM-dd"), b.multiplier])
+  );
+
+  const ukBankHolidayNameMap = getUkBankHolidayNameMapInRange(startOfDay(weekStart), endOfDay(weekEnd));
 
   const workers: PayrollWorker[] = careWorkers.map((user) => {
     const records = timeRecords.filter((r) => r.userId === user.id);
     const days: PayrollDay[] = records.map((r) => {
       const mins = r.totalMinutes ?? 0;
-      const hours = Math.round((mins / 60) * 100) / 100;
+      const totalHours = Math.round((mins / 60) * 100) / 100;
+      const hoursForPay = mins / 60;
       const dateKey = format(r.clockInAt, "yyyy-MM-dd");
+      const rate = resolveRate(user, r.shiftType);
+      const basePay = calculatePay(rate, hoursForPay);
+      const ukHolidayMultiplier = holidayMultiplierByDateKey.get(dateKey) ?? 1;
+      const pay =
+        ukHolidayMultiplier === 1 ? basePay : Math.round(basePay * ukHolidayMultiplier * 100) / 100;
+      const ukBankHolidayName = ukBankHolidayNameMap.get(dateKey) ?? null;
       return {
         date: dateKey,
         dateLabel: format(r.clockInAt, "EEE d MMM"),
@@ -63,10 +89,15 @@ export async function getPayrollForWeek(referenceDate: Date): Promise<{
         clockOutAt: r.clockOutAt,
         breakMinutes: r.breakMinutes ?? 0,
         totalMinutes: mins,
-        totalHours: hours,
+        totalHours: totalHours,
         shiftType: r.shiftType,
         propertyId: r.propertyId,
         propertyName: r.property?.name ?? null,
+        basePay,
+        pay,
+        isUkBankHoliday: ukBankHolidayName != null,
+        ukBankHolidayName,
+        ukHolidayMultiplier,
       };
     });
     days.sort((a, b) => {
@@ -82,7 +113,10 @@ export async function getPayrollForWeek(referenceDate: Date): Promise<{
     for (const r of records) {
       const hours = (r.totalMinutes ?? 0) / 60;
       const rate = resolveRate(user, r.shiftType);
-      const pay = calculatePay(rate, hours);
+      const basePay = calculatePay(rate, hours);
+      const dateKey = format(r.clockInAt, "yyyy-MM-dd");
+      const multiplier = holidayMultiplierByDateKey.get(dateKey) ?? 1;
+      const pay = multiplier === 1 ? basePay : Math.round(basePay * multiplier * 100) / 100;
       totalPay += pay;
       const key = r.propertyId ?? "__none__";
       const propName = r.property?.name ?? null;
@@ -133,7 +167,7 @@ export async function getPayrollForPeriod(periodStart: Date, periodEnd: Date): P
   if ((session.user as { role?: string }).role !== "ADMIN")
     return { weekStart: new Date(), weekEnd: new Date(), weekLabel: "", workers: [] };
 
-  const [careWorkers, timeRecords] = await Promise.all([
+  const [careWorkers, timeRecords, holidayBoosts] = await Promise.all([
     prisma.user.findMany({
       where: { role: "CARE_WORKER", active: true },
       select: {
@@ -153,20 +187,44 @@ export async function getPayrollForPeriod(periodStart: Date, periodEnd: Date): P
         approvalStatus: "APPROVED",
         user: { role: "CARE_WORKER" },
       },
-      include: {
+      select: {
+        ...timeRecordCoreSelect,
         user: { select: { id: true } },
         property: { select: { id: true, name: true } },
       },
       orderBy: { clockInAt: "asc" },
     }),
+    prisma.holidayRateBoost.findMany({
+      where: {
+        date: {
+          gte: startOfDay(periodStart),
+          lte: endOfDay(periodEnd),
+        },
+      },
+      select: { date: true, multiplier: true },
+      orderBy: { date: "asc" },
+    }),
   ]);
+
+  const holidayMultiplierByDateKey = new Map<string, number>(
+    holidayBoosts.map((b) => [format(b.date, "yyyy-MM-dd"), b.multiplier])
+  );
+
+  const ukBankHolidayNameMap = getUkBankHolidayNameMapInRange(startOfDay(periodStart), endOfDay(periodEnd));
 
   const workers: PayrollWorker[] = careWorkers.map((user) => {
     const records = timeRecords.filter((r) => r.userId === user.id);
     const days: PayrollDay[] = records.map((r) => {
       const mins = r.totalMinutes ?? 0;
-      const hours = Math.round((mins / 60) * 100) / 100;
+      const totalHours = Math.round((mins / 60) * 100) / 100;
+      const hoursForPay = mins / 60;
       const dateKey = format(r.clockInAt, "yyyy-MM-dd");
+      const rate = resolveRate(user, r.shiftType);
+      const basePay = calculatePay(rate, hoursForPay);
+      const ukHolidayMultiplier = holidayMultiplierByDateKey.get(dateKey) ?? 1;
+      const pay =
+        ukHolidayMultiplier === 1 ? basePay : Math.round(basePay * ukHolidayMultiplier * 100) / 100;
+      const ukBankHolidayName = ukBankHolidayNameMap.get(dateKey) ?? null;
       return {
         date: dateKey,
         dateLabel: format(r.clockInAt, "EEE d MMM"),
@@ -174,10 +232,15 @@ export async function getPayrollForPeriod(periodStart: Date, periodEnd: Date): P
         clockOutAt: r.clockOutAt,
         breakMinutes: r.breakMinutes ?? 0,
         totalMinutes: mins,
-        totalHours: hours,
+        totalHours: totalHours,
         shiftType: r.shiftType,
         propertyId: r.propertyId,
         propertyName: r.property?.name ?? null,
+        basePay,
+        pay,
+        isUkBankHoliday: ukBankHolidayName != null,
+        ukBankHolidayName,
+        ukHolidayMultiplier,
       };
     });
     days.sort((a, b) => {
@@ -193,7 +256,10 @@ export async function getPayrollForPeriod(periodStart: Date, periodEnd: Date): P
     for (const r of records) {
       const hours = (r.totalMinutes ?? 0) / 60;
       const rate = resolveRate(user, r.shiftType);
-      const pay = calculatePay(rate, hours);
+      const basePay = calculatePay(rate, hours);
+      const dateKey = format(r.clockInAt, "yyyy-MM-dd");
+      const multiplier = holidayMultiplierByDateKey.get(dateKey) ?? 1;
+      const pay = multiplier === 1 ? basePay : Math.round(basePay * multiplier * 100) / 100;
       totalPay += pay;
       const key = r.propertyId ?? "__none__";
       const propName = r.property?.name ?? null;
@@ -291,7 +357,7 @@ export async function getMyPayrollForWeek(referenceDate: Date): Promise<{
   const userId = session.user.id;
   const { weekStart, weekEnd } = getWeekBounds(referenceDate);
 
-  const [user, timeRecords] = await Promise.all([
+  const [user, timeRecords, holidayBoosts] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -310,19 +376,43 @@ export async function getMyPayrollForWeek(referenceDate: Date): Promise<{
         clockInAt: { gte: weekStart, lte: weekEnd },
         approvalStatus: "APPROVED",
       },
-      include: {
+      select: {
+        ...timeRecordCoreSelect,
         property: { select: { id: true, name: true } },
       },
       orderBy: { clockInAt: "asc" },
     }),
+    prisma.holidayRateBoost.findMany({
+      where: {
+        date: {
+          gte: startOfDay(weekStart),
+          lte: endOfDay(weekEnd),
+        },
+      },
+      select: { date: true, multiplier: true },
+      orderBy: { date: "asc" },
+    }),
   ]);
+
+  const holidayMultiplierByDateKey = new Map<string, number>(
+    holidayBoosts.map((b) => [format(b.date, "yyyy-MM-dd"), b.multiplier])
+  );
+
+  const ukBankHolidayNameMap = getUkBankHolidayNameMapInRange(startOfDay(weekStart), endOfDay(weekEnd));
 
   if (!user) return { weekStart, weekEnd, weekLabel: "", workers: [] };
 
   const days: PayrollDay[] = timeRecords.map((r) => {
     const mins = r.totalMinutes ?? 0;
-    const hours = Math.round((mins / 60) * 100) / 100;
+    const totalHours = Math.round((mins / 60) * 100) / 100;
+    const hoursForPay = mins / 60;
     const dateKey = format(r.clockInAt, "yyyy-MM-dd");
+    const rate = resolveRate(user, r.shiftType);
+    const basePay = calculatePay(rate, hoursForPay);
+    const ukHolidayMultiplier = holidayMultiplierByDateKey.get(dateKey) ?? 1;
+    const pay =
+      ukHolidayMultiplier === 1 ? basePay : Math.round(basePay * ukHolidayMultiplier * 100) / 100;
+    const ukBankHolidayName = ukBankHolidayNameMap.get(dateKey) ?? null;
     return {
       date: dateKey,
       dateLabel: format(r.clockInAt, "EEE d MMM"),
@@ -330,10 +420,15 @@ export async function getMyPayrollForWeek(referenceDate: Date): Promise<{
       clockOutAt: r.clockOutAt,
       breakMinutes: r.breakMinutes ?? 0,
       totalMinutes: mins,
-      totalHours: hours,
+      totalHours: totalHours,
       shiftType: r.shiftType,
       propertyId: r.propertyId,
       propertyName: r.property?.name ?? null,
+      basePay,
+      pay,
+      isUkBankHoliday: ukBankHolidayName != null,
+      ukBankHolidayName,
+      ukHolidayMultiplier,
     };
   });
   days.sort((a, b) => {
@@ -349,7 +444,10 @@ export async function getMyPayrollForWeek(referenceDate: Date): Promise<{
   for (const r of timeRecords) {
     const hours = (r.totalMinutes ?? 0) / 60;
     const rate = resolveRate(user, r.shiftType);
-    const pay = calculatePay(rate, hours);
+    const basePay = calculatePay(rate, hours);
+    const dateKey = format(r.clockInAt, "yyyy-MM-dd");
+    const multiplier = holidayMultiplierByDateKey.get(dateKey) ?? 1;
+    const pay = multiplier === 1 ? basePay : Math.round(basePay * multiplier * 100) / 100;
     totalPay += pay;
     const key = r.propertyId ?? "__none__";
     const propName = r.property?.name ?? null;

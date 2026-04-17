@@ -66,12 +66,148 @@ enum FollowUpStatus {
 enum ShiftType {
   STANDARD
   LONE_WORKING
-  SLEEP_NIGHT
+  AWAKE_NIGHT   // Night staff awake during shift (hourly)
+  SLEEP_NIGHT   // Sleep at unit – fixed rate, not hourly
 }
 
 enum RateType {
   HOURLY
   FIXED
+}
+
+// --- Housing, H&S, maintenance, service charges (admin) ---
+
+enum HsCheckKind {
+  GAS_SAFETY
+  ELECTRICAL
+  FIRE_SAFETY
+  LEGIONELLA
+  GENERAL
+  OTHER
+}
+
+enum HsInspectionInstanceStatus {
+  DUE
+  COMPLETED
+  OVERDUE
+  SKIPPED
+}
+
+enum MaintenancePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum MaintenanceTaskStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum ServiceChargeFrequency {
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+}
+
+enum ServiceChargePaymentStatus {
+  DUE
+  PARTIAL
+  PAID
+  OVERDUE
+  WAIVED
+}
+
+enum AuditFieldType {
+  TEXT
+  TEXTAREA
+  NUMBER
+  DATE
+  YES_NO
+  DROPDOWN
+  CHECKBOX_GROUP
+  TABLE_GRID
+  SECTION_HEADER
+  SIGNATURE
+}
+
+enum AuditSubmissionStatus {
+  DRAFT
+  SUBMITTED
+  REVIEWED
+}
+
+/** How a template is included in recording: org-wide, per property, per service user only, or via care package. */
+enum AuditTemplateAssignmentScope {
+  GLOBAL
+  PROPERTY
+  SERVICE_USER
+  /** Included when the service user’s care package links this template (Audits → Care packages). */
+  CARE_PACKAGE
+}
+
+enum AuditActionStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+  OVERDUE
+  CANCELLED
+}
+
+enum AuditActionPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum CqcKeyQuestion {
+  SAFE
+  EFFECTIVE
+  CARING
+  RESPONSIVE
+  WELL_LED
+}
+
+enum CqcRating {
+  OUTSTANDING
+  GOOD
+  REQUIRES_IMPROVEMENT
+  INADEQUATE
+}
+
+enum RiskLikelihood {
+  RARE
+  UNLIKELY
+  POSSIBLE
+  LIKELY
+  ALMOST_CERTAIN
+}
+
+enum RiskImpact {
+  NEGLIGIBLE
+  MINOR
+  MODERATE
+  MAJOR
+  CATASTROPHIC
+}
+
+enum RiskStatus {
+  OPEN
+  MITIGATED
+  ACCEPTED
+  CLOSED
+}
+
+enum AuditScheduleFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUAL
 }
 
 model User {
@@ -101,7 +237,25 @@ model User {
   followUpActionsCompleted FollowUpAction[] @relation("FollowUpCompletedBy")
   notificationsReceived   Notification[]  @relation("NotificationRecipient")
   notificationsCreated    Notification[]  @relation("NotificationCreatedBy")
+  hsInspectionsCompleted  HsInspection[]  @relation("HsInspectionCompletedBy")
+  maintenanceTasksAssigned MaintenanceTask[] @relation("MaintenanceTaskAssignee")
+  auditFormSubmissions      AuditFormSubmission[] @relation("AuditSubmissionBy")
+  auditFormReviews          AuditFormSubmission[] @relation("AuditSubmissionReviewedBy")
+  cqcAssessmentsAuthored    AuditCqcAssessment[]  @relation("CqcAssessmentAssessor")
+  auditActionsAssigned      AuditAction[]         @relation("AuditActionAssignedTo")
+  auditActionsCompleted     AuditAction[]         @relation("AuditActionCompletedBy")
+  riskEntriesOwned          RiskRegisterEntry[]   @relation("RiskOwnedBy")
+  complianceDocsUploaded    ComplianceDocument[]  @relation("ComplianceDocumentUploadedBy")
+  documentReadReceipts      DocumentReadReceipt[]
+  trainingRecords           StaffTrainingRecord[]
+  staffDocuments            StaffDocumentTracker[] @relation("StaffDocumentUser")
+  staffDocumentsVerified    StaffDocumentTracker[] @relation("StaffDocumentVerifiedBy")
+  supervisionsAsStaff       SupervisionSchedule[]  @relation("SupervisionStaff")
+  supervisionsAsSupervisor  SupervisionSchedule[]  @relation("SupervisionSupervisor")
+  competencyProfiles        UserCompetencyProfile[]
+  auditFormTemplateChanges    AuditFormTemplateChangeLog[] @relation("AuditTemplateChangeAuthor")
 }
+
 
 model PasswordResetToken {
   id        String   @id @default(cuid())
@@ -117,12 +271,149 @@ model Property {
   id        String   @id @default(cuid())
   name      String   // Care home / venue name
   address   String?
+  addressLine1 String?
+  city         String?
+  postcode     String?
+  communalAreasNotes String? @db.Text // Communal areas, access, notes
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   serviceUsers ServiceUser[]
   shifts       Shift[]
   timeRecords  TimeRecord[]
+  units                 PropertyUnit[]
+  assets                PropertyAsset[]
+  hsSchedules           HsInspectionSchedule[]
+  maintenanceTasks      MaintenanceTask[]
+  serviceChargeSchedules ServiceChargeSchedule[]
+  auditFormAssignments  PropertyFormAssignment[]
+  auditFormSubmissions  AuditFormSubmission[]
+  cqcAssessments        AuditCqcAssessment[]
+  auditActions          AuditAction[]
+  auditSchedules        AuditSchedule[]
+  riskEntries           RiskRegisterEntry[]
+  complianceDocuments   ComplianceDocument[]
+}
+
+/// Lettable / identifiable space within a property (room, flat, bed).
+model PropertyUnit {
+  id          String   @id @default(cuid())
+  propertyId  String
+  label       String   // e.g. "Flat 12", "Room 3"
+  floor       String?
+  sortOrder   Int      @default(0)
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  serviceUsers ServiceUser[]
+  maintenanceTasks MaintenanceTask[]
+  serviceChargePayments ServiceChargePayment[]
+}
+
+/// Registered assets (boiler, fire panel, etc.) for H&S and maintenance context.
+model PropertyAsset {
+  id          String   @id @default(cuid())
+  propertyId  String
+  name        String
+  category    String?  // e.g. "Heating", "Fire", "Electrical"
+  location    String?
+  notes       String?  @db.Text
+  lastCheckedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+}
+
+model HsInspectionSchedule {
+  id            String      @id @default(cuid())
+  propertyId    String
+  title         String
+  checkKind     HsCheckKind @default(GENERAL)
+  frequency     ServiceChargeFrequency @default(MONTHLY) // reuse period granularity
+  /// Months between due dates (1=monthly, 3=quarterly, 12=annual)
+  intervalMonths Int        @default(12)
+  nextDueDate   DateTime
+  isActive      Boolean     @default(true)
+  notes         String?     @db.Text
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  property   Property       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  inspections HsInspection[]
+}
+
+model HsInspection {
+  id            String                    @id @default(cuid())
+  scheduleId    String
+  dueDate       DateTime
+  status        HsInspectionInstanceStatus @default(DUE)
+  completedAt   DateTime?
+  completedById String?
+  notes         String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  schedule     HsInspectionSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  completedBy  User?                @relation("HsInspectionCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+}
+
+model MaintenanceTask {
+  id            String                 @id @default(cuid())
+  propertyId    String
+  unitId        String?
+  title         String
+  description   String?                @db.Text
+  priority      MaintenancePriority    @default(MEDIUM)
+  status        MaintenanceTaskStatus  @default(OPEN)
+  assignedToId  String?
+  dueAt         DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  property   Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  unit       PropertyUnit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  assignee   User?        @relation("MaintenanceTaskAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+}
+
+model ServiceChargeSchedule {
+  id            String                 @id @default(cuid())
+  propertyId    String
+  name          String
+  description   String?                @db.Text
+  amount        Float                  // amount per period
+  frequency     ServiceChargeFrequency @default(MONTHLY)
+  startDate     DateTime
+  isActive      Boolean                @default(true)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  payments ServiceChargePayment[]
+}
+
+model ServiceChargePayment {
+  id             String                    @id @default(cuid())
+  scheduleId     String
+  unitId         String?
+  serviceUserId  String
+  periodLabel    String                    // e.g. "2025-03" or "2025-Q1"
+  periodStart    DateTime
+  periodEnd      DateTime
+  amountDue      Float
+  amountPaid     Float                     @default(0)
+  status         ServiceChargePaymentStatus @default(DUE)
+  paidAt         DateTime?
+  reference      String?
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  schedule    ServiceChargeSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  unit        PropertyUnit?         @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  serviceUser ServiceUser           @relation(fields: [serviceUserId], references: [id], onDelete: Cascade)
 }
 
 model ServiceUser {
@@ -131,19 +422,74 @@ model ServiceUser {
   dateOfBirth     DateTime?
   address         String?
   propertyId      String?   // Which care venue they reside at
+  unitId          String?   // Room / flat within property (tenant link)
   allergies       String?
   medicalNotes    String?
   emergencyContactName  String?
   emergencyContactPhone String?
   careNeedsLevel  String?   // e.g. "low", "medium", "high"
+  /** Optional pathway / package (diabetes, supported living, etc.) — drives CARE_PACKAGE audit templates. */
+  carePackageId   String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   property        Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  unit            PropertyUnit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  carePackage     CarePackage? @relation(fields: [carePackageId], references: [id], onDelete: SetNull)
   shifts          Shift[]
   incidentReports IncidentReport[]
   carePlans       CarePlan[]
   followUpActions FollowUpAction[]
+  serviceChargePayments ServiceChargePayment[]
+  auditFormSubmissions  AuditFormSubmission[]
+  auditFormAssignments  ServiceUserFormAssignment[]
+}
+
+/** Grouping for pathway-specific audits (e.g. diabetes, residential care). Linked templates use assignment scope CARE_PACKAGE. */
+model CarePackage {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  templates    CarePackageTemplate[]
+  serviceUsers ServiceUser[]
+  competencyProfiles CarePackageCompetencyProfile[]
+}
+
+model CarePackageTemplate {
+  id             String   @id @default(cuid())
+  carePackageId  String
+  formTemplateId String
+  createdAt      DateTime @default(now())
+
+  carePackage   CarePackage       @relation(fields: [carePackageId], references: [id], onDelete: Cascade)
+  formTemplate  AuditFormTemplate @relation(fields: [formTemplateId], references: [id], onDelete: Cascade)
+
+  @@unique([carePackageId, formTemplateId])
+}
+
+/** Optional per-service-user template overrides within a property (manager workflow). */
+model ServiceUserFormAssignment {
+  id            String   @id @default(cuid())
+  serviceUserId String
+  formTemplateId String
+  assignedTemplateVersion Int @default(1)
+  assignedBaseTemplateId String?
+  assignedAt    DateTime @default(now())
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  serviceUser  ServiceUser       @relation(fields: [serviceUserId], references: [id], onDelete: Cascade)
+  formTemplate AuditFormTemplate @relation("ServiceUserAssignmentTemplate", fields: [formTemplateId], references: [id], onDelete: Cascade)
+  assignedBaseTemplate AuditFormTemplate? @relation("ServiceUserAssignmentBaseTemplate", fields: [assignedBaseTemplateId], references: [id], onDelete: SetNull)
+
+  @@unique([serviceUserId, formTemplateId])
 }
 
 
@@ -163,6 +509,7 @@ model Shift {
   serviceUser   ServiceUser  @relation(fields: [serviceUserId], references: [id], onDelete: Cascade)
   property      Property?    @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   journalEntries JournalEntry[]
+  timeRecordsClockedTo TimeRecord[] @relation("TimeRecordLinkedShift")
 }
 
 model JournalEntry {
@@ -189,11 +536,16 @@ model TimeRecord {
   totalMinutes Int?    // calculated: (clockOut - clockIn) - breakMinutes
   approvalStatus TimeRecordApproval @default(PENDING)
   notes       String?
+  /** When clock-in venue differs from roster expectation (e.g. hospital, extra cover). */
+  offRosterReason String?
+  /** Roster shift this clock-in was intended for, when it matches policy. */
+  linkedShiftId String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   property Property @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  linkedShift Shift? @relation("TimeRecordLinkedShift", fields: [linkedShiftId], references: [id], onDelete: SetNull)
 }
 
 model RateCard {
@@ -251,6 +603,8 @@ model IncidentReport {
   serviceUser ServiceUser @relation(fields: [serviceUserId], references: [id], onDelete: Cascade)
   careWorker  User         @relation(fields: [careWorkerId], references: [id], onDelete: Cascade)
   followUpActions FollowUpAction[]
+  riskLinks      RiskIncidentLink[]
+  auditActions   AuditAction[]
 }
 
 model FollowUpAction {
@@ -297,6 +651,16 @@ model CalendarNote {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+model HolidayRateBoost {
+  id         String   @id @default(cuid())
+  date       DateTime @unique // holiday calendar date (date only)
+  name       String   // e.g. Christmas Day
+  multiplier Float    @default(1.0) // 1.5 = 1.5x pay for this date
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model AuditLog {
   id        String   @id @default(cuid())
   userId    String?
@@ -314,11 +678,367 @@ model Notification {
   userId      String   // recipient
   title       String
   message     String?  // optional longer body
-  link        String?  // path to navigate to when clicked (e.g. /calendar, /journal)
+  link        String?  // path to navigate to when clicked (e.g. /calendar, /notes)
   read        Boolean  @default(false)
   createdById String?  // admin who sent it
   createdAt   DateTime @default(now())
 
   user      User  @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
   createdBy User? @relation("NotificationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+}
+
+model AuditFormTemplate {
+  id          String   @id @default(cuid())
+  /** Stable key for pack sync / imports; optional for ad-hoc templates. */
+  templateCode String? @unique
+  name        String
+  description String?
+  category    String?
+  /** GLOBAL = all properties & service users; PROPERTY = enable per property; SERVICE_USER = assign per person only; CARE_PACKAGE = linked from service user care package. */
+  assignmentScope AuditTemplateAssignmentScope @default(PROPERTY)
+  fields      Json
+  /** Optional instructions for the anonymous row AI assistant (no PHI in prompts). */
+  aiAssistantPrompt String? @db.Text
+  /** How often managers expect a filing for compliance tracking (UK calendar where noted). */
+  filingFrequency     AuditScheduleFrequency @default(MONTHLY)
+  /** For MONTHLY: calendar day in the UK month (1–28). Null = due by last day of that month. */
+  monthlyFilingDueDay Int?
+  version     Int      @default(1)
+  basedOnTemplateId String?
+  isSystem    Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  basedOn             AuditFormTemplate?      @relation("AuditTemplateBase", fields: [basedOnTemplateId], references: [id], onDelete: SetNull)
+  derivedTemplates    AuditFormTemplate[]     @relation("AuditTemplateBase")
+  propertyAssignments PropertyFormAssignment[] @relation("AssignmentTemplate")
+  baseAssignments     PropertyFormAssignment[] @relation("AssignmentBaseTemplate")
+  serviceUserAssignments ServiceUserFormAssignment[] @relation("ServiceUserAssignmentTemplate")
+  serviceUserBaseAssignments ServiceUserFormAssignment[] @relation("ServiceUserAssignmentBaseTemplate")
+  carePackageLinks    CarePackageTemplate[]
+  submissions         AuditFormSubmission[]
+  schedules           AuditSchedule[]
+  changeLogs          AuditFormTemplateChangeLog[]
+}
+
+model AuditFormTemplateChangeLog {
+  id             String   @id @default(cuid())
+  formTemplateId String
+  changedById    String?
+  versionAfter   Int
+  summaryLine    String   @db.Text
+  changesJson    Json?
+  createdAt      DateTime @default(now())
+
+  formTemplate AuditFormTemplate @relation(fields: [formTemplateId], references: [id], onDelete: Cascade)
+  changedBy    User?             @relation("AuditTemplateChangeAuthor", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([formTemplateId, createdAt])
+}
+
+model PropertyFormAssignment {
+  id            String   @id @default(cuid())
+  propertyId    String
+  formTemplateId String
+  assignedTemplateVersion Int @default(1)
+  assignedBaseTemplateId String?
+  assignedAt    DateTime @default(now())
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  property    Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  formTemplate AuditFormTemplate @relation("AssignmentTemplate", fields: [formTemplateId], references: [id], onDelete: Cascade)
+  assignedBaseTemplate AuditFormTemplate? @relation("AssignmentBaseTemplate", fields: [assignedBaseTemplateId], references: [id], onDelete: SetNull)
+
+  @@unique([propertyId, formTemplateId])
+}
+
+model AuditFormSubmission {
+  id            String                @id @default(cuid())
+  formTemplateId String
+  propertyId    String
+  serviceUserId String?
+  submittedById String
+  data          Json
+  status        AuditSubmissionStatus @default(DRAFT)
+  reviewedById  String?
+  reviewedAt    DateTime?
+  reviewNotes   String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  formTemplate AuditFormTemplate @relation(fields: [formTemplateId], references: [id], onDelete: Cascade)
+  property     Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  serviceUser  ServiceUser?      @relation(fields: [serviceUserId], references: [id], onDelete: SetNull)
+  submittedBy  User              @relation("AuditSubmissionBy", fields: [submittedById], references: [id], onDelete: Cascade)
+  reviewedBy   User?             @relation("AuditSubmissionReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  actions      AuditAction[]
+}
+
+model AuditCqcAssessment {
+  id             String    @id @default(cuid())
+  propertyId     String
+  assessmentDate DateTime
+  assessorId     String
+  overallRating  CqcRating?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  assessor User     @relation("CqcAssessmentAssessor", fields: [assessorId], references: [id], onDelete: Cascade)
+  scores   AuditCqcScore[]
+  actions  AuditAction[]
+}
+
+model AuditCqcScore {
+  id              String         @id @default(cuid())
+  assessmentId    String
+  keyQuestion     CqcKeyQuestion
+  subArea         String
+  score           Int
+  findings        String?
+  actionsRequired String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  assessment AuditCqcAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+}
+
+model AuditAction {
+  id            String              @id @default(cuid())
+  propertyId    String
+  assessmentId  String?
+  submissionId  String?
+  riskEntryId   String?
+  incidentId    String?
+  source        String              @default("MANUAL")
+  description   String
+  assignedToId  String?
+  dueDate       DateTime
+  status        AuditActionStatus   @default(OPEN)
+  priority      AuditActionPriority @default(MEDIUM)
+  completedAt   DateTime?
+  completedById String?
+  notes         String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  property    Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  assessment  AuditCqcAssessment? @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
+  submission  AuditFormSubmission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+  riskEntry   RiskRegisterEntry?  @relation(fields: [riskEntryId], references: [id], onDelete: SetNull)
+  incident    IncidentReport?     @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  assignedTo  User?               @relation("AuditActionAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  completedBy User?               @relation("AuditActionCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+}
+
+model AuditSchedule {
+  id            String                 @id @default(cuid())
+  propertyId    String
+  formTemplateId String?
+  title         String
+  frequency     AuditScheduleFrequency
+  nextDueDate   DateTime
+  isActive      Boolean                @default(true)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  property     Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  formTemplate AuditFormTemplate? @relation(fields: [formTemplateId], references: [id], onDelete: SetNull)
+}
+
+model RiskRegisterEntry {
+  id             String         @id @default(cuid())
+  propertyId     String
+  title          String
+  description    String?
+  category       String
+  likelihood     RiskLikelihood
+  impact         RiskImpact
+  riskScore      Int
+  currentControls String?
+  plannedActions String?
+  ownerId        String?
+  status         RiskStatus     @default(OPEN)
+  reviewDate     DateTime?
+  lastReviewedAt DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  property      Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  owner         User?              @relation("RiskOwnedBy", fields: [ownerId], references: [id], onDelete: SetNull)
+  incidentLinks RiskIncidentLink[]
+  auditActions  AuditAction[]
+}
+
+model RiskIncidentLink {
+  id         String   @id @default(cuid())
+  riskEntryId String
+  incidentId String
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  riskEntry RiskRegisterEntry @relation(fields: [riskEntryId], references: [id], onDelete: Cascade)
+  incident  IncidentReport    @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@unique([riskEntryId, incidentId])
+}
+
+model ComplianceDocument {
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  category     String
+  fileName     String
+  fileUrl      String
+  fileSize     Int?
+  version      Int      @default(1)
+  propertyId   String?
+  expiresAt    DateTime?
+  isActive     Boolean  @default(true)
+  uploadedById String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  property     Property?             @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  uploadedBy   User                  @relation("ComplianceDocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: Cascade)
+  readReceipts DocumentReadReceipt[]
+}
+
+model DocumentReadReceipt {
+  id           String   @id @default(cuid())
+  documentId   String
+  userId       String
+  readAt       DateTime @default(now())
+  acknowledged Boolean  @default(true)
+
+  document ComplianceDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, userId])
+}
+
+model TrainingRequirement {
+  id            String   @id @default(cuid())
+  /** Stable key for seed / imports (e.g. safeguarding_adults_lv1). */
+  code          String?  @unique
+  name          String
+  category      String?
+  isMandatory   Boolean  @default(true)
+  renewalMonths Int?
+  /** When true, matrix applies this requirement to every active care worker (plus any profile-specific items). */
+  appliesToAllStaff Boolean @default(true)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  records      StaffTrainingRecord[]
+  profileLinks CompetencyProfileRequirement[]
+}
+
+/** Staff pathway (e.g. medication, LD) — maps to extra training requirements beyond core statutory set. */
+model CompetencyProfile {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requirements CompetencyProfileRequirement[]
+  users        UserCompetencyProfile[]
+  carePackages CarePackageCompetencyProfile[]
+}
+
+model CompetencyProfileRequirement {
+  id                  String   @id @default(cuid())
+  competencyProfileId String
+  requirementId       String
+  createdAt           DateTime @default(now())
+
+  competencyProfile CompetencyProfile   @relation(fields: [competencyProfileId], references: [id], onDelete: Cascade)
+  requirement       TrainingRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+
+  @@unique([competencyProfileId, requirementId])
+}
+
+model UserCompetencyProfile {
+  id                  String   @id @default(cuid())
+  userId              String
+  competencyProfileId String
+  createdAt           DateTime @default(now())
+
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  competencyProfile CompetencyProfile @relation(fields: [competencyProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, competencyProfileId])
+}
+
+/** Suggested staff competency profile for workers supporting service users on this care package. */
+model CarePackageCompetencyProfile {
+  id                  String   @id @default(cuid())
+  carePackageId       String
+  competencyProfileId String
+  createdAt           DateTime @default(now())
+
+  carePackage       CarePackage       @relation(fields: [carePackageId], references: [id], onDelete: Cascade)
+  competencyProfile CompetencyProfile @relation(fields: [competencyProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([carePackageId, competencyProfileId])
+}
+
+model StaffTrainingRecord {
+  id            String   @id @default(cuid())
+  userId        String
+  requirementId String
+  completedAt   DateTime
+  expiresAt     DateTime?
+  certificateRef String?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requirement TrainingRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, requirementId, completedAt])
+}
+
+model StaffDocumentTracker {
+  id           String   @id @default(cuid())
+  userId       String
+  documentType String
+  documentRef  String?
+  issuedAt     DateTime?
+  expiresAt    DateTime?
+  verified     Boolean  @default(false)
+  verifiedById String?
+  verifiedAt   DateTime?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User  @relation("StaffDocumentUser", fields: [userId], references: [id], onDelete: Cascade)
+  verifiedBy User? @relation("StaffDocumentVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+}
+
+model SupervisionSchedule {
+  id             String                 @id @default(cuid())
+  staffId        String
+  supervisorId   String?
+  frequency      AuditScheduleFrequency
+  nextDueDate    DateTime
+  lastCompletedAt DateTime?
+  notes          String?
+  isActive       Boolean                @default(true)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  staff      User  @relation("SupervisionStaff", fields: [staffId], references: [id], onDelete: Cascade)
+  supervisor User? @relation("SupervisionSupervisor", fields: [supervisorId], references: [id], onDelete: SetNull)
 }

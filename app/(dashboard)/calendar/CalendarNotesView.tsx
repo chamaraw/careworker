@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
+import type { UkBankHoliday } from "@/lib/uk-bank-holidays";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,11 +22,14 @@ type Note = {
 export function CalendarNotesView({
   initialMonth,
   notes,
+  ukPublicHolidays = [],
   prevMonth,
   nextMonth,
 }: {
   initialMonth: Date;
   notes: Note[];
+  /** UK public holidays for the visible month (all nations merged). */
+  ukPublicHolidays?: UkBankHoliday[];
   prevMonth: Date;
   nextMonth: Date;
 }) {
@@ -54,8 +58,12 @@ export function CalendarNotesView({
     }
   }
 
+  const holidayDates = ukPublicHolidays.map((h) => parseISO(h.dateKey));
+  const holidayNameByKey = new Map(ukPublicHolidays.map((h) => [h.dateKey, h.name]));
+
   const modifiers = {
     hasNote: Object.keys(notesByDate).map((d) => parseISO(d)),
+    ukPublicHoliday: holidayDates,
   };
 
   return (
@@ -72,7 +80,18 @@ export function CalendarNotesView({
             </Link>
           </div>
         </CardHeader>
-        <CardContent className="p-4 sm:p-6">
+        <CardContent className="p-4 sm:p-6 space-y-3">
+          <p className="text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-2">
+              <span className="inline-block size-3 rounded-sm bg-amber-200 border border-amber-400/80" />
+              UK public holiday
+            </span>
+            <span className="mx-2">·</span>
+            <span className="inline-flex items-center gap-2">
+              <span className="inline-block size-3 rounded-sm bg-primary/10 border border-primary/20" />
+              Has note
+            </span>
+          </p>
           <Calendar
             mode="single"
             required={false}
@@ -82,6 +101,8 @@ export function CalendarNotesView({
             modifiers={modifiers}
             modifiersClassNames={{
               hasNote: "bg-primary/10 font-semibold",
+              ukPublicHoliday:
+                "bg-amber-100 dark:bg-amber-950/40 font-semibold ring-1 ring-amber-400/60 ring-inset",
             }}
             className="rounded-lg border w-full max-w-full [--cell-size:2.75rem] p-3"
             classNames={{
@@ -102,6 +123,19 @@ export function CalendarNotesView({
         <CardContent className="space-y-4">
           {selectedDate && (
             <>
+              {(() => {
+                const key = format(selectedDate, "yyyy-MM-dd");
+                const holidayName = holidayNameByKey.get(key);
+                if (!holidayName) return null;
+                return (
+                  <div className="rounded-md border border-amber-300/80 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm">
+                    <span className="font-medium text-amber-900 dark:text-amber-100">
+                      UK public holiday
+                    </span>
+                    <p className="text-amber-900/90 dark:text-amber-100/90 mt-0.5">{holidayName}</p>
+                  </div>
+                );
+              })()}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Add note</label>
                 <Textarea

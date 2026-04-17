@@ -52,6 +52,11 @@ export default async function PayrollSlipPage({
     totalHours: d.totalHours,
     shiftType: d.shiftType,
     propertyName: d.propertyName ?? null,
+    basePay: d.basePay,
+    pay: d.pay,
+    isUkBankHoliday: d.isUkBankHoliday,
+    ukBankHolidayName: d.ukBankHolidayName,
+    ukHolidayMultiplier: d.ukHolidayMultiplier,
   }));
 
   return (

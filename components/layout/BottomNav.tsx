@@ -2,26 +2,52 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Calendar, BookOpen, Clock, AlertTriangle } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { useEffect, useState } from "react";
+import { LayoutDashboard, Calendar, BookOpen, Clock, AlertTriangle, Banknote } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const bottomItems = [
+const workerItems = [
   { href: "/dashboard", label: "Home", icon: LayoutDashboard },
   { href: "/roster", label: "Roster", icon: Calendar },
-  { href: "/journal", label: "Journal", icon: BookOpen },
-  { href: "/hours", label: "Hours", icon: Clock },
+  { href: "/dashboard#worker-hours", label: "Hours", icon: Clock },
   { href: "/incidents", label: "Incidents", icon: AlertTriangle },
+  { href: "/notes", label: "Notes", icon: BookOpen },
+];
+
+const adminItems = [
+  { href: "/dashboard", label: "Home", icon: LayoutDashboard },
+  { href: "/roster", label: "Roster", icon: Calendar },
+  { href: "/payroll", label: "Payroll", icon: Banknote },
+  { href: "/incidents", label: "Incidents", icon: AlertTriangle },
+  { href: "/notes", label: "Notes", icon: BookOpen },
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const isAdmin = (session?.user as { role?: string })?.role === "ADMIN";
+  const bottomItems = isAdmin ? adminItems : workerItems;
+  const [hash, setHash] = useState(() =>
+    typeof window !== "undefined" ? window.location.hash : ""
+  );
+
+  useEffect(() => {
+    const sync = () => setHash(window.location.hash);
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, [pathname]);
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t-2 border-[var(--nav-bottom-border)] bg-[var(--nav-bottom-bg)] backdrop-blur-md shadow-[0 -4px 14px rgba(0,0,0,0.08)] safe-area-pb">
       <div className="grid grid-cols-5 h-16 min-h-[4rem]">
         {bottomItems.map((item) => {
           const Icon = item.icon;
-          const active = pathname === item.href || pathname.startsWith(item.href + "/");
+          const isHoursTab = item.href.includes("#worker-hours");
+          const active = isHoursTab
+            ? pathname === "/dashboard" && hash === "#worker-hours"
+            : pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
           return (
             <Link
               key={item.href}

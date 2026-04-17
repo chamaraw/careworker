@@ -5,6 +5,7 @@ import { format } from "date-fns";
 const SHIFT_LABELS: Record<string, string> = {
   STANDARD: "Standard",
   LONE_WORKING: "Lone working",
+  AWAKE_NIGHT: "Awake night",
   SLEEP_NIGHT: "Sleep night",
 };
 
@@ -18,6 +19,11 @@ export type SalarySlipDay = {
   totalHours: number;
   shiftType?: string;
   propertyName?: string | null;
+  basePay: number;
+  pay: number;
+  isUkBankHoliday: boolean;
+  ukBankHolidayName: string | null;
+  ukHolidayMultiplier: number;
 };
 
 type PropertyBreakdownItem = {
@@ -88,17 +94,19 @@ export function SalarySlip({
               <tr className="bg-stone-100 text-left">
                 <th className="border border-stone-200 px-3 sm:px-4 py-3 font-medium">Date</th>
                 <th className="border border-stone-200 px-3 sm:px-4 py-3 font-medium">Property</th>
+                <th className="border border-stone-200 px-3 sm:px-4 py-3 font-medium">Holiday</th>
                 <th className="border border-stone-200 px-3 sm:px-4 py-3 font-medium">Shift type</th>
                 <th className="border border-stone-200 px-3 sm:px-4 py-3 font-medium">Clock in</th>
                 <th className="border border-stone-200 px-3 sm:px-4 py-3 font-medium">Clock out</th>
                 <th className="border border-stone-200 px-3 sm:px-4 py-3 font-medium text-right">Break (min)</th>
                 <th className="border border-stone-200 px-3 sm:px-4 py-3 font-medium text-right">Hours</th>
+                <th className="border border-stone-200 px-3 sm:px-4 py-3 font-medium text-right">Pay</th>
               </tr>
             </thead>
             <tbody>
               {days.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="border border-stone-200 px-3 sm:px-4 py-6 text-stone-500 text-center">
+                  <td colSpan={9} className="border border-stone-200 px-3 sm:px-4 py-6 text-stone-500 text-center">
                     No approved hours for this period
                   </td>
                 </tr>
@@ -108,6 +116,18 @@ export function SalarySlip({
                     <td className="border border-stone-200 px-3 sm:px-4 py-3">{d.dateLabel}</td>
                     <td className="border border-stone-200 px-3 sm:px-4 py-3 text-stone-600">
                       {d.propertyName ?? "—"}
+                    </td>
+                    <td className="border border-stone-200 px-3 sm:px-4 py-3">
+                      {d.isUkBankHoliday ? (
+                        <div className="flex flex-col">
+                          <span className="whitespace-nowrap">{d.ukBankHolidayName ?? "Bank holiday"}</span>
+                          <span className="text-xs text-stone-500">
+                            {d.ukHolidayMultiplier !== 1 ? `${d.ukHolidayMultiplier.toFixed(2)}x` : "1.00x"}
+                          </span>
+                        </div>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="border border-stone-200 px-3 sm:px-4 py-3">
                       {d.shiftType ? (SHIFT_LABELS[d.shiftType] ?? d.shiftType) : "—"}
@@ -123,6 +143,14 @@ export function SalarySlip({
                     </td>
                     <td className="border border-stone-200 px-3 sm:px-4 py-3 text-right font-medium">
                       {d.totalHours.toFixed(2)}
+                    </td>
+                    <td className="border border-stone-200 px-3 sm:px-4 py-3 text-right font-semibold">
+                      £{d.pay.toFixed(2)}
+                      {d.isUkBankHoliday && d.ukHolidayMultiplier !== 1 && (
+                        <div className="text-xs text-stone-500">
+                          Base £{d.basePay.toFixed(2)} × {d.ukHolidayMultiplier.toFixed(2)}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))

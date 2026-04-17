@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useRegisterStaffAssistantPage } from "@/components/staff-assistant/staff-assistant-context";
+import { StaffAssistantFieldDraftButton } from "@/components/staff-assistant/StaffAssistantFieldDraftButton";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -15,7 +17,13 @@ import {
 } from "@/components/ui/select";
 import { createServiceUser } from "./actions";
 
-export function ServiceUserForm({ properties }: { properties: { id: string; name: string }[] }) {
+export function ServiceUserForm({
+  properties,
+  carePackages,
+}: {
+  properties: { id: string; name: string }[];
+  carePackages: { id: string; name: string; slug: string }[];
+}) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
@@ -26,8 +34,58 @@ export function ServiceUserForm({ properties }: { properties: { id: string; name
   const [emergencyContactName, setEmergencyContactName] = useState("");
   const [emergencyContactPhone, setEmergencyContactPhone] = useState("");
   const [careNeedsLevel, setCareNeedsLevel] = useState("");
+  const [carePackageId, setCarePackageId] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+
+  const assistantReg = useMemo(
+    () => ({
+      flowId: "service_users",
+      fields: [
+        {
+          id: "medicalNotes",
+          label: "Medical notes",
+          insertable: true,
+          whatGoodLooksLike: "Brief, proportionate facts for care staff — not a full clinical record.",
+        },
+        {
+          id: "allergies",
+          label: "Allergies",
+          whatGoodLooksLike: "Known allergens and reactions; keep updated after GP or hospital info.",
+        },
+      ],
+      getShareablePreview: () =>
+        JSON.stringify(
+          {
+            name: name.trim(),
+            dateOfBirth: dateOfBirth || null,
+            address: address.trim() || null,
+            propertyId: propertyId || null,
+            allergies: allergies.trim() || null,
+            medicalNotes: medicalNotes.slice(0, 4000),
+            emergencyContactName: emergencyContactName.trim() || null,
+            emergencyContactPhone: emergencyContactPhone.trim() || null,
+            careNeedsLevel: careNeedsLevel.trim() || null,
+            carePackageId: carePackageId || null,
+          },
+          null,
+          2
+        ),
+    }),
+    [
+      name,
+      dateOfBirth,
+      address,
+      propertyId,
+      allergies,
+      medicalNotes,
+      emergencyContactName,
+      emergencyContactPhone,
+      careNeedsLevel,
+      carePackageId,
+    ]
+  );
+  useRegisterStaffAssistantPage("service-user-create", assistantReg);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,6 +106,7 @@ export function ServiceUserForm({ properties }: { properties: { id: string; name
         emergencyContactName: emergencyContactName.trim() || undefined,
         emergencyContactPhone: emergencyContactPhone.trim() || undefined,
         careNeedsLevel: careNeedsLevel.trim() || undefined,
+        carePackageId: carePackageId.trim() || null,
       });
       router.push("/service-users");
       router.refresh();
@@ -121,7 +180,10 @@ export function ServiceUserForm({ properties }: { properties: { id: string; name
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="medicalNotes">Medical notes</Label>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Label htmlFor="medicalNotes">Medical notes</Label>
+          <StaffAssistantFieldDraftButton fieldId="medicalNotes" label="Medical notes" onApply={setMedicalNotes} />
+        </div>
         <Textarea
           id="medicalNotes"
           value={medicalNotes}
@@ -160,6 +222,33 @@ export function ServiceUserForm({ properties }: { properties: { id: string; name
           className="min-h-[48px]"
         />
       </div>
+      {carePackages.length > 0 && (
+        <div className="space-y-2">
+          <Label>Care package</Label>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Optional pathway for audit forms (e.g. diabetes). Configure under Audits → Care packages.
+          </p>
+          <Select value={carePackageId} onValueChange={(v) => setCarePackageId(v ?? "")}>
+            <SelectTrigger className="min-h-[48px]">
+              {carePackageId ? (
+                <span className="truncate">
+                  {carePackages.find((p) => p.id === carePackageId)?.name ?? carePackageId}
+                </span>
+              ) : (
+                <span className="text-[var(--muted-foreground)]">None</span>
+              )}
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">None</SelectItem>
+              {carePackages.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       <div className="flex gap-2">
         <Button type="submit" size="lg" className="min-h-[48px]" disabled={pending}>
           {pending ? "Saving…" : "Save"}

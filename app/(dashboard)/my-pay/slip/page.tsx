@@ -11,6 +11,7 @@ export default async function MyPaySlipPage({
 }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  if ((session.user as { role?: string }).role === "ADMIN") redirect("/dashboard");
 
   const params = await searchParams;
   const weekStartParam = params.weekStart;
@@ -53,6 +54,11 @@ export default async function MyPaySlipPage({
     totalHours: d.totalHours,
     shiftType: d.shiftType,
     propertyName: d.propertyName ?? null,
+    basePay: d.basePay,
+    pay: d.pay,
+    isUkBankHoliday: d.isUkBankHoliday,
+    ukBankHolidayName: d.ukBankHolidayName,
+    ukHolidayMultiplier: d.ukHolidayMultiplier,
   }));
 
   return (

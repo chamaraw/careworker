@@ -22,7 +22,7 @@ export async function getIncidents(filters: {
       ...(filters.serviceUserId && { serviceUserId: filters.serviceUserId }),
     },
     include: {
-      serviceUser: { select: { id: true, name: true } },
+      serviceUser: { select: { id: true, name: true, propertyId: true } },
       careWorker: { select: { id: true, name: true } },
     },
     orderBy: { occurredAt: "desc" },

@@ -26,8 +26,16 @@ type Record = {
   totalMinutes: number | null;
   approvalStatus: string;
   notes?: string | null;
+  offRosterReason?: string | null;
+  /** Prisma payload varies (nested select vs relation); read via `rosterServiceUserName`. */
+  linkedShift?: unknown;
   user?: { name: string };
 };
+
+function rosterServiceUserName(r: { linkedShift?: unknown }): string | undefined {
+  const ls = r.linkedShift as { serviceUser?: { name?: string } } | null | undefined;
+  return ls?.serviceUser?.name;
+}
 
 export function TimesheetTable({
   records,
@@ -87,6 +95,7 @@ export function TimesheetTable({
             <TableHead className="text-base font-semibold">Break</TableHead>
             <TableHead className="text-base font-semibold">Total</TableHead>
             {isAdmin && <TableHead className="text-base font-semibold">Status</TableHead>}
+            {isAdmin && <TableHead className="text-base font-semibold min-w-[10rem]">Roster / exception</TableHead>}
             <TableHead className="w-[140px] text-base font-semibold">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -111,6 +120,22 @@ export function TimesheetTable({
                     <Badge variant={r.approvalStatus === "APPROVED" ? "default" : r.approvalStatus === "REJECTED" ? "destructive" : "secondary"}>
                       {r.approvalStatus}
                     </Badge>
+                  </TableCell>
+                )}
+                {isAdmin && (
+                  <TableCell className="text-sm text-muted-foreground max-w-[14rem]">
+                    {rosterServiceUserName(r) ? (
+                      <span className="block text-foreground font-medium">Roster: {rosterServiceUserName(r)}</span>
+                    ) : null}
+                    {r.offRosterReason ? (
+                      <span className="block mt-1 text-amber-950" title={r.offRosterReason}>
+                        Off-roster: {r.offRosterReason.length > 80 ? `${r.offRosterReason.slice(0, 80)}…` : r.offRosterReason}
+                      </span>
+                    ) : rosterServiceUserName(r) ? (
+                      <span className="block text-xs mt-0.5">Matched roster visit</span>
+                    ) : (
+                      <span className="block text-xs">—</span>
+                    )}
                   </TableCell>
                 )}
                 <TableCell>

@@ -4,13 +4,16 @@ export default auth((req) => {
   const isLoggedIn = !!req.auth;
   const path = req.nextUrl.pathname;
 
-  const publicPaths = ["/login", "/forgot-password", "/reset-password"];
+  const publicPaths = ["/login", "/forgot-password", "/reset-password", "/manager/login"];
   const isPublic = publicPaths.some((p) => path === p || path.startsWith(p + "/"));
 
   if (isPublic && isLoggedIn) {
-    const role = req.auth?.user?.role;
     const url = req.nextUrl.clone();
-    url.pathname = role === "ADMIN" ? "/dashboard" : "/dashboard";
+    if (path === "/manager/login" || path.startsWith("/manager/login/")) {
+      url.pathname = req.auth?.user?.role === "ADMIN" ? "/audits/manager" : "/dashboard";
+    } else {
+      url.pathname = "/dashboard";
+    }
     return Response.redirect(url);
   }
 
@@ -22,7 +25,7 @@ export default auth((req) => {
   }
 
   const adminOnlyPaths = ["/staff", "/audit", "/performance"];
-  const isAdminOnly = adminOnlyPaths.some((p) => path.startsWith(p));
+  const isAdminOnly = adminOnlyPaths.some((p) => path === p || path.startsWith(p + "/"));
   if (isAdminOnly && req.auth?.user?.role !== "ADMIN") {
     const url = req.nextUrl.clone();
     url.pathname = "/dashboard";

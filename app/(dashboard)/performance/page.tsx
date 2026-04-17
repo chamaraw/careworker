@@ -87,7 +87,7 @@ export default async function PerformancePage({
             Shift expectation is derived from care need (typical task mix): low = {BASELINE_MINUTES_PER_SHIFT.low} min, medium ={" "}
             {BASELINE_MINUTES_PER_SHIFT.medium} min, high = {BASELINE_MINUTES_PER_SHIFT.high} min.
             Target completion = {(BASELINE_COMPLETION_RATE * 100).toFixed(0)}%. Baseline incidents ={" "}
-            {BASELINE_INCIDENTS_PER_100H} per 100 h, journal = {BASELINE_JOURNAL_PER_10H} per 10 h. Score 100 = at baseline; higher is better.
+            {BASELINE_INCIDENTS_PER_100H} per 100 h, notes = {BASELINE_JOURNAL_PER_10H} per 10 h. Score 100 = at baseline; higher is better.
           </p>
         </CardHeader>
         <CardContent className="pt-0">

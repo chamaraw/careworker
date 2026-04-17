@@ -21,27 +21,44 @@ import {
   Banknote,
   CreditCard,
   Receipt,
+  Building2,
+  ClipboardCheck,
+  ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useSession } from "next-auth/react";
 
-const navItems = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  adminOnly?: boolean;
+  /** Hide for admins (e.g. My Pay is care-worker only). */
+  careWorkerOnly?: boolean;
+};
+
+const navItems: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/roster", label: "Roster", icon: Calendar },
-  { href: "/journal", label: "Journal", icon: BookOpen },
-  { href: "/hours", label: "Hours", icon: Clock },
-  { href: "/my-pay", label: "My Pay", icon: Receipt },
+  { href: "/dashboard#worker-hours", label: "Hours", icon: Clock, careWorkerOnly: true },
+  { href: "/my-pay", label: "My Pay", icon: Receipt, careWorkerOnly: true },
   { href: "/incidents", label: "Incidents", icon: AlertTriangle },
   { href: "/follow-ups", label: "Follow-ups", icon: ListTodo },
   { href: "/service-users", label: "Service Users", icon: Users },
   { href: "/care-plans", label: "Care Plans", icon: FileText },
   { href: "/staff", label: "Staff", icon: UserCog, adminOnly: true },
+  { href: "/housing", label: "Housing", icon: Building2, adminOnly: true },
+  { href: "/audits", label: "Audits", icon: ClipboardCheck, adminOnly: true },
+  { href: "/audits/manager", label: "Audit manager", icon: ClipboardList, adminOnly: true },
+  { href: "/audits/recording", label: "Audit recording", icon: ClipboardCheck, careWorkerOnly: true },
   { href: "/rate-cards", label: "Rate Cards", icon: CreditCard, adminOnly: true },
+  { href: "/rates", label: "Holiday rates", icon: Banknote, adminOnly: true },
   { href: "/payroll", label: "Payroll", icon: Banknote, adminOnly: true },
   { href: "/performance", label: "Performance", icon: BarChart3, adminOnly: true },
   { href: "/calendar", label: "Calendar Notes", icon: CalendarDays },
   { href: "/audit", label: "Audit Log", icon: ScrollText, adminOnly: true },
+  { href: "/notes", label: "Notes", icon: BookOpen },
 ];
 
 function NavLink({
@@ -78,7 +95,11 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const isAdmin = (session?.user as { role?: string })?.role === "ADMIN";
-  const items = navItems.filter((item) => !item.adminOnly || isAdmin);
+  const items = navItems.filter((item) => {
+    if (item.adminOnly && !isAdmin) return false;
+    if ("careWorkerOnly" in item && item.careWorkerOnly && isAdmin) return false;
+    return true;
+  });
 
   const nav = (
     <nav className="flex flex-col gap-0.5 px-2">

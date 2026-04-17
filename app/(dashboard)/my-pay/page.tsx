@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { getMyRatesAndVenues, getMyPaySlipPeriods } from "../payroll/actions";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileText, Download, Building2, CreditCard } from "lucide-react";
@@ -8,12 +9,14 @@ import { FileText, Download, Building2, CreditCard } from "lucide-react";
 const SHIFT_LABELS: Record<string, string> = {
   STANDARD: "Standard",
   LONE_WORKING: "Lone working",
+  AWAKE_NIGHT: "Awake night",
   SLEEP_NIGHT: "Sleep night",
 };
 
 export default async function MyPayPage() {
   const session = await auth();
   if (!session?.user?.id) return null;
+  if ((session.user as { role?: string }).role === "ADMIN") redirect("/dashboard");
 
   const [ratesAndVenues, periods] = await Promise.all([
     getMyRatesAndVenues(),

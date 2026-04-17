@@ -5,35 +5,200 @@ import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { logAudit } from "@/lib/audit";
 import type { TimeRecordApproval } from "@prisma/client";
-import { differenceInMinutes } from "date-fns";
+import { differenceInMinutes, endOfDay, startOfDay } from "date-fns";
+import {
+  computeRosterClockInTargets,
+  OFF_ROSTER_REASON_MIN_LENGTH,
+} from "@/lib/clock-in-eligibility";
+import { timeRecordCoreSelect } from "@/lib/time-record-core-select";
+import { timeRecordHasRosterExceptionColumns } from "@/lib/time-record-extra-columns";
 
 /** Shift type for time records (matches Prisma ShiftType enum). */
-type ShiftTypeParam = "STANDARD" | "LONE_WORKING" | "SLEEP_NIGHT";
+type ShiftTypeParam = "STANDARD" | "LONE_WORKING" | "AWAKE_NIGHT" | "SLEEP_NIGHT";
 
 export async function getActiveTimeRecord(userId: string) {
   return prisma.timeRecord.findFirst({
     where: { userId, clockOutAt: null },
     orderBy: { clockInAt: "desc" },
+    select: timeRecordCoreSelect,
   });
 }
 
-export async function clockIn(propertyId: string, shiftType: ShiftTypeParam = "STANDARD") {
+export type ClockInEligibilityPayload = {
+  rosterWindows: Array<{
+    shiftId: string;
+    propertyId: string;
+    propertyName: string;
+    serviceUserName: string;
+    startAt: string;
+    endAt: string;
+    kind: "active" | "early_next";
+  }>;
+  /** Shifts today that overlap the day but have no venue property set (shift + service user). */
+  missingVenueShifts: Array<{
+    shiftId: string;
+    serviceUserName: string;
+    startAt: string;
+    endAt: string;
+  }>;
+  expectedPropertyIds: string[];
+  eligibleProperties: Array<{ id: string; name: string }>;
+  allProperties: Array<{ id: string; name: string }>;
+  offRosterMinChars: number;
+};
+
+async function buildClockInEligibility(userId: string): Promise<ClockInEligibilityPayload> {
+  const now = new Date();
+  const dayStart = startOfDay(now);
+  const dayEnd = endOfDay(now);
+
+  const [shifts, allProperties] = await Promise.all([
+    prisma.shift.findMany({
+      where: {
+        careWorkerId: userId,
+        startAt: { lte: dayEnd },
+        endAt: { gte: dayStart },
+        status: { not: "CANCELLED" },
+      },
+      include: {
+        serviceUser: { select: { name: true, propertyId: true } },
+        property: { select: { id: true, name: true } },
+      },
+      orderBy: { startAt: "asc" },
+    }),
+    prisma.property.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+  ]);
+
+  const nameById = new Map(allProperties.map((p) => [p.id, p.name]));
+
+  const shiftInputs = shifts.map((s) => ({
+    shiftId: s.id,
+    startAt: s.startAt,
+    endAt: s.endAt,
+    venuePropertyId: s.propertyId ?? s.property?.id ?? s.serviceUser.propertyId ?? null,
+    serviceUserName: s.serviceUser.name,
+  }));
+
+  const { expectedPropertyIds, matched } = computeRosterClockInTargets(shiftInputs, now);
+
+  const rosterWindows = matched.map((m) => ({
+    shiftId: m.shiftId,
+    propertyId: m.propertyId,
+    propertyName: nameById.get(m.propertyId) ?? "Venue",
+    serviceUserName: m.serviceUserName,
+    startAt: m.startAt.toISOString(),
+    endAt: m.endAt.toISOString(),
+    kind: m.kind,
+  }));
+
+  const eligibleProperties = Array.from(new Set(expectedPropertyIds))
+    .map((id) => ({ id, name: nameById.get(id) ?? id }))
+    .filter((p) => p.id);
+
+  return {
+    rosterWindows,
+    missingVenueShifts: shiftInputs
+      .filter((s) => !s.venuePropertyId)
+      .map((s) => ({
+        shiftId: s.shiftId,
+        serviceUserName: s.serviceUserName,
+        startAt: s.startAt.toISOString(),
+        endAt: s.endAt.toISOString(),
+      })),
+    expectedPropertyIds,
+    eligibleProperties,
+    allProperties,
+    offRosterMinChars: OFF_ROSTER_REASON_MIN_LENGTH,
+  };
+}
+
+/** Care worker: roster-based venues for clock-in + full property list for justified exceptions. */
+export async function getClockInEligibilityForWorker(): Promise<ClockInEligibilityPayload | null> {
+  const session = await auth();
+  if (!session?.user?.id) return null;
+  if ((session.user as { role?: string }).role === "ADMIN") return null;
+  return buildClockInEligibility(session.user.id);
+}
+
+export async function clockIn(
+  propertyId: string,
+  shiftType: ShiftTypeParam = "STANDARD",
+  opts?: { offRosterReason?: string | null }
+) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
+  if ((session.user as { role?: string }).role === "ADMIN") {
+    throw new Error("Admins should not use worker clock-in; add hours via Payroll or Hours admin tools.");
+  }
   if (!propertyId) throw new Error("Property is required to clock in");
   const existing = await getActiveTimeRecord(session.user.id);
   if (existing) throw new Error("Already clocked in");
-  const record = await prisma.timeRecord.create({
-    data: {
-      userId: session.user.id,
-      propertyId,
-      shiftType,
-      clockInAt: new Date(),
-    },
+
+  const eligibility = await buildClockInEligibility(session.user.id);
+  const reason = (opts?.offRosterReason ?? "").trim();
+  const isExpected = eligibility.expectedPropertyIds.includes(propertyId);
+
+  if (!isExpected) {
+    if (reason.length < OFF_ROSTER_REASON_MIN_LENGTH) {
+      if (eligibility.expectedPropertyIds.length === 0) {
+        throw new Error(
+          `No rostered visit with a venue matches this time. Choose the property where you are working and add a reason (at least ${OFF_ROSTER_REASON_MIN_LENGTH} characters), e.g. hospital escort or covering another home.`
+        );
+      }
+      throw new Error(
+        `That venue is not on your roster for this time slot. Add a reason (at least ${OFF_ROSTER_REASON_MIN_LENGTH} characters), e.g. hospital visit or emergency cover.`
+      );
+    }
+  }
+
+  let linkedShiftId: string | null = null;
+  if (isExpected) {
+    const sameProp = eligibility.rosterWindows.filter((w) => w.propertyId === propertyId);
+    if (sameProp.length === 1) linkedShiftId = sameProp[0].shiftId;
+    else if (sameProp.length > 1) linkedShiftId = sameProp[0].shiftId;
+  }
+
+  const fullData = {
+    userId: session.user.id,
+    propertyId,
+    shiftType,
+    clockInAt: new Date(),
+    offRosterReason: isExpected ? null : reason,
+    linkedShiftId,
+  };
+  let record;
+  try {
+    record = await prisma.timeRecord.create({ data: fullData });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!msg.includes("offRosterReason") && !msg.includes("linkedShiftId") && !msg.includes("does not exist")) {
+      throw err;
+    }
+    record = await prisma.timeRecord.create({
+      data: {
+        userId: session.user.id,
+        propertyId,
+        shiftType,
+        clockInAt: new Date(),
+      },
+    });
+  }
+  await logAudit({
+    userId: session.user.id,
+    action: "CREATE",
+    entity: "TimeRecord",
+    entityId: record.id,
+    details: JSON.stringify({
+      kind: "clockIn",
+      clockInAt: record.clockInAt.toISOString(),
+      propertyId: record.propertyId,
+      shiftType: record.shiftType,
+      linkedShiftId,
+      offRosterReason: isExpected ? null : reason,
+    }),
   });
-  await logAudit({ userId: session.user.id, action: "CREATE", entity: "TimeRecord", entityId: record.id, details: "clockIn" });
-  revalidatePath("/hours");
   revalidatePath("/dashboard");
+  revalidatePath("/audits/manager");
 }
 
 export async function clockOut(notes?: string) {
@@ -51,9 +216,22 @@ export async function clockOut(notes?: string) {
       notes: notes ?? record.notes,
     },
   });
-  await logAudit({ userId: session.user.id, action: "UPDATE", entity: "TimeRecord", entityId: record.id, details: "clockOut" });
-  revalidatePath("/hours");
+  await logAudit({
+    userId: session.user.id,
+    action: "UPDATE",
+    entity: "TimeRecord",
+    entityId: record.id,
+    details: JSON.stringify({
+      kind: "clockOut",
+      clockInAt: record.clockInAt.toISOString(),
+      clockOutAt: clockOutAt.toISOString(),
+      propertyId: record.propertyId,
+      shiftType: record.shiftType,
+      totalMinutes: Math.max(0, totalMinutes),
+    }),
+  });
   revalidatePath("/dashboard");
+  revalidatePath("/audits/manager");
 }
 
 export async function addBreak(minutes: number) {
@@ -65,7 +243,6 @@ export async function addBreak(minutes: number) {
     where: { id: record.id },
     data: { breakMinutes: (record.breakMinutes ?? 0) + minutes },
   });
-  revalidatePath("/hours");
   revalidatePath("/dashboard");
 }
 
@@ -135,7 +312,6 @@ export async function createTimeRecordManual(data: {
     entityId: record.id,
     details: "manual entry",
   });
-  revalidatePath("/hours");
   revalidatePath("/dashboard");
   revalidatePath("/payroll");
 }
@@ -182,6 +358,7 @@ export async function getTimeRecords(filters: {
   const session = await auth();
   if (!session?.user?.id) return [];
   const isAdmin = (session.user as { role?: string }).role === "ADMIN";
+  const rosterCols = await timeRecordHasRosterExceptionColumns();
   const records = await prisma.timeRecord.findMany({
     where: {
       ...(filters.userId ? { userId: filters.userId } : !isAdmin ? { userId: session.user.id } : {}),
@@ -192,7 +369,22 @@ export async function getTimeRecords(filters: {
         },
       }),
     },
-    include: { user: { select: { id: true, name: true } } },
+    select: {
+      ...timeRecordCoreSelect,
+      ...(rosterCols
+        ? {
+            offRosterReason: true,
+            linkedShiftId: true,
+            linkedShift: {
+              select: {
+                id: true,
+                serviceUser: { select: { name: true } },
+              },
+            },
+          }
+        : {}),
+      user: { select: { id: true, name: true } },
+    },
     orderBy: { clockInAt: "desc" },
     take: 100,
   });
@@ -208,7 +400,6 @@ export async function setApproval(id: string, status: TimeRecordApproval) {
     where: { id },
     data: { approvalStatus: status },
   });
-  revalidatePath("/hours");
   revalidatePath("/dashboard");
   revalidatePath("/payroll");
 }
@@ -226,7 +417,6 @@ export async function approveAllForWeek(weekStart: Date, weekEnd: Date) {
     },
     data: { approvalStatus: "APPROVED" },
   });
-  revalidatePath("/hours");
   revalidatePath("/dashboard");
   revalidatePath("/payroll");
 }
@@ -261,7 +451,6 @@ export async function updateTimeRecord(
     },
   });
   await logAudit({ userId: session.user.id, action: "UPDATE", entity: "TimeRecord", entityId: id, details: "edit" });
-  revalidatePath("/hours");
   revalidatePath("/dashboard");
 }
 
@@ -270,12 +459,12 @@ export async function deleteTimeRecord(id: string) {
   if (!session?.user?.id) throw new Error("Unauthorized");
   const record = await prisma.timeRecord.findUnique({
     where: { id },
+    select: { userId: true },
   });
   if (!record || record.userId !== session.user.id)
     throw new Error("You can only delete your own time records");
   await prisma.timeRecord.delete({ where: { id } });
   await logAudit({ userId: session.user.id, action: "DELETE", entity: "TimeRecord", entityId: id });
-  revalidatePath("/hours");
   revalidatePath("/dashboard");
 }
 

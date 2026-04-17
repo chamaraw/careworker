@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { updateJournalEntry } from "@/app/(dashboard)/journal/actions";
+import { updateJournalEntry } from "@/app/(dashboard)/notes/actions";
 import { toast } from "sonner";
 
 const CATEGORIES = [
@@ -67,7 +67,7 @@ export function EditJournalEntryDialog({
         category: category as (typeof CATEGORIES)[number]["value"],
         content: content.trim(),
       });
-      toast.success("Journal entry updated");
+      toast.success("Note updated");
       onOpenChange(false);
       router.refresh();
     } catch (err) {
@@ -83,7 +83,7 @@ export function EditJournalEntryDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Edit journal entry</DialogTitle>
+          <DialogTitle>Edit note</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4">
           <div className="grid gap-2">

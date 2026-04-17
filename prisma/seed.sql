@@ -2,13 +2,16 @@
 -- 1) Create tables first: run prisma/schema-neon.sql in Neon SQL Editor
 -- 2) Then run this file (seed.sql), or: psql $DATABASE_URL -f prisma/seed.sql
 -- Password for all seeded users: password123
+-- Extra admin for audit/manager workflows: manager@fileycare.com (sign in at /manager/login or /login)
 
 BEGIN;
 
--- Bcrypt hash for "password123" (10 rounds)
+-- Bcrypt hash for "password123" (10 rounds, bcryptjs)
+-- Columns: omit hourlyRate/rateCardId so this works with or without those columns on User
 INSERT INTO "User" (id, email, "passwordHash", name, phone, role, qualifications, active, "createdAt", "updatedAt")
 VALUES
   ('seed_admin', 'admin@fileycare.com', '$2b$10$2Xbe3ls5LfhdIaLCYWk0SuU.E0rUhR9adzKQxffjqPVO0jeia1PDe', 'Admin User', NULL, 'ADMIN'::"Role", NULL, true, NOW(), NOW()),
+  ('seed_manager_admin', 'manager@fileycare.com', '$2b$10$2Xbe3ls5LfhdIaLCYWk0SuU.E0rUhR9adzKQxffjqPVO0jeia1PDe', 'Audit Manager', NULL, 'ADMIN'::"Role", NULL, true, NOW(), NOW()),
   ('seed_w1', 'worker@fileycare.com', '$2b$10$2Xbe3ls5LfhdIaLCYWk0SuU.E0rUhR9adzKQxffjqPVO0jeia1PDe', 'Jane Care Worker', '07700 900000', 'CARE_WORKER'::"Role", 'NVQ Level 2', true, NOW(), NOW()),
   ('seed_w2', 'worker2@fileycare.com', '$2b$10$2Xbe3ls5LfhdIaLCYWk0SuU.E0rUhR9adzKQxffjqPVO0jeia1PDe', 'Bob Support', '07700 900002', 'CARE_WORKER'::"Role", 'NVQ Level 3', true, NOW(), NOW()),
   ('seed_w3', 'worker3@fileycare.com', '$2b$10$2Xbe3ls5LfhdIaLCYWk0SuU.E0rUhR9adzKQxffjqPVO0jeia1PDe', 'Priya Sharma', '07700 900003', 'CARE_WORKER'::"Role", 'NVQ Level 2', true, NOW(), NOW()),
@@ -94,5 +97,48 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO "CarePlan" (id, "serviceUserId", title, goals, interventions, "reviewDate", status, "createdAt", "updatedAt")
 VALUES ('seed_careplan_1', 'seed-service-user-1', 'Personal care and mobility', 'Maintain independence with daily activities. Support mobility and medication.', 'Daily support with washing, dressing. Prompt medication. Encourage gentle exercise.', CURRENT_DATE + 90, 'ACTIVE'::"CarePlanStatus", NOW(), NOW())
 ON CONFLICT (id) DO NOTHING;
+
+-- Audit template example: Blood Pressure Monitor Diary
+INSERT INTO "AuditFormTemplate" (id, name, description, category, fields, "isSystem", "isActive", "createdAt", "updatedAt")
+VALUES (
+  'seed_audit_template_bp',
+  'Blood Pressure Monitor Diary',
+  'NHS-style blood pressure diary with AM/PM readings and pulse tracking.',
+  'Health Monitoring',
+  '[
+    {"key":"service_user_name","label":"Service User Name","type":"TEXT","required":true},
+    {"key":"date_of_birth","label":"Date of Birth","type":"DATE"},
+    {"key":"instructions","label":"Take at least 2 readings morning and evening for 7 days.","type":"SECTION_HEADER"},
+    {"key":"bp_readings","label":"Blood Pressure Readings","type":"TABLE_GRID","defaultRows":0,"columns":[
+      {"key":"date","label":"Date","type":"DATE"},
+      {"key":"time_of_day","label":"AM/PM","type":"DROPDOWN","options":["AM","PM"]},
+      {"key":"bp1","label":"1st BP (mmHg)","type":"TEXT"},
+      {"key":"pulse1","label":"1st Pulse","type":"NUMBER"},
+      {"key":"bp2","label":"2nd BP (mmHg)","type":"TEXT"},
+      {"key":"pulse2","label":"2nd Pulse","type":"NUMBER"},
+      {"key":"comments","label":"Comments","type":"TEXT"}
+    ]}
+  ]'::jsonb,
+  true,
+  true,
+  NOW(),
+  NOW()
+)
+ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE "AuditFormTemplate" ADD COLUMN IF NOT EXISTS "aiAssistantPrompt" TEXT;
+ALTER TABLE "AuditFormTemplate" ADD COLUMN IF NOT EXISTS "templateCode" TEXT;
+
+UPDATE "AuditFormTemplate"
+SET "templateCode" = 'blood_pressure_monitor_diary'
+WHERE id = 'seed_audit_template_bp' AND ("templateCode" IS NULL OR "templateCode" = '');
+
+UPDATE "AuditFormTemplate"
+SET "aiAssistantPrompt" = 'This section is for structured readings taken at a sitting (e.g. home BP style).
+
+When staff describe what happened in plain language, map values into the row fields only when they can be inferred without any person''s name, address, NHS number, or date of birth. Use ISO date yyyy-mm-dd for the reading date when mentioned; AM/PM from context; blood pressure as systolic/diastolic with a slash (e.g. 128/82); pulse as a whole number.
+
+If the text mentions feeling unwell, chest pain, severe headache, confusion, or very high/low numbers, add non-diagnostic suggested_actions (e.g. follow local escalation policy, seek urgent clinical advice if unwell) and short concerns. Ask clarifying questions in questions_for_staff only about the measurement context (rested, after activity, device), not about identity.'
+WHERE id = 'seed_audit_template_bp';
 
 COMMIT;

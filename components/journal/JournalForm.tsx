@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useRegisterStaffAssistantPage } from "@/components/staff-assistant/staff-assistant-context";
+import { StaffAssistantFieldDraftButton } from "@/components/staff-assistant/StaffAssistantFieldDraftButton";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -18,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { createJournalEntry } from "@/app/(dashboard)/journal/actions";
+import { createJournalEntry } from "@/app/(dashboard)/notes/actions";
 
 const CATEGORIES = [
   { value: "ROUTINE", label: "Routine" },
@@ -52,6 +54,33 @@ export function JournalForm({
   const [content, setContent] = useState("");
   const [error, setError] = useState("");
 
+  const assistantReg = useMemo(
+    () => ({
+      flowId: "notes",
+      fields: [
+        {
+          id: "content",
+          label: "Note content",
+          required: true,
+          insertable: true,
+          whatGoodLooksLike: "Factual care delivered, observations, and outcomes — respectful and attributable.",
+        },
+      ],
+      getShareablePreview: () =>
+        JSON.stringify(
+          {
+            shiftId: shiftId || null,
+            category,
+            content: content.slice(0, 4000),
+          },
+          null,
+          2
+        ),
+    }),
+    [shiftId, category, content]
+  );
+  useRegisterStaffAssistantPage("journal-form-dialog", assistantReg);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -76,7 +105,7 @@ export function JournalForm({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>New journal entry</DialogTitle>
+          <DialogTitle>New note</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -124,7 +153,10 @@ export function JournalForm({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Notes</Label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label>Notes</Label>
+              <StaffAssistantFieldDraftButton fieldId="note_content" label="Care note" onApply={setContent} />
+            </div>
             <Textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}

@@ -2,7 +2,10 @@ import { auth } from "@/lib/auth";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getRateCards } from "@/app/(dashboard)/rate-cards/actions";
+import { getCompetencyProfilesForStaffSelect, getUserCompetencyProfileIds } from "../../actions";
+import { getStaffCompetencyDetailForAdmin } from "@/app/(dashboard)/audits/actions";
 import { StaffEditForm } from "../../StaffEditForm";
+import { StaffCompetencySection } from "../../StaffCompetencySection";
 
 export default async function EditStaffPage({
   params,
@@ -14,7 +17,7 @@ export default async function EditStaffPage({
   if ((session.user as { role?: string }).role !== "ADMIN")
     redirect("/staff");
   const { id } = await params;
-  const [user, rateCards] = await Promise.all([
+  const [user, rateCards, competencyProfiles, selectedProfileIds, competencyDetail] = await Promise.all([
     prisma.user.findUnique({
       where: { id, role: "CARE_WORKER" },
       select: {
@@ -29,6 +32,9 @@ export default async function EditStaffPage({
       },
     }),
     getRateCards(),
+    getCompetencyProfilesForStaffSelect(),
+    getUserCompetencyProfileIds(id),
+    getStaffCompetencyDetailForAdmin(id),
   ]);
   if (!user) notFound();
   return (
@@ -47,6 +53,15 @@ export default async function EditStaffPage({
         }}
         rateCards={rateCards.map((rc) => ({ id: rc.id, name: rc.name }))}
       />
+      {competencyDetail ? (
+        <StaffCompetencySection
+          userId={user.id}
+          allProfiles={competencyProfiles}
+          selectedProfileIds={selectedProfileIds}
+          competencyItems={competencyDetail.items}
+          profileNames={competencyDetail.profileNames}
+        />
+      ) : null}
     </div>
   );
 }

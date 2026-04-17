@@ -5,7 +5,10 @@ import { format } from "date-fns";
 import { getShiftContextNotes } from "@/app/(dashboard)/roster/actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { BookOpen, ListTodo, Stethoscope, AlertCircle } from "lucide-react";
+import Link from "next/link";
+import { BookOpen, ListTodo, Stethoscope, AlertCircle, ClipboardList, ArrowRight } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button-variants";
+import { cn } from "@/lib/utils";
 
 type NotesData = Awaited<ReturnType<typeof getShiftContextNotes>>;
 
@@ -34,8 +37,13 @@ export function ShiftContextNotes({ serviceUserId, serviceUserName }: { serviceU
 
   if (!data) return null;
 
-  const { serviceUser, journalEntries, followUpActions } = data;
-  const hasAny = journalEntries.length > 0 || followUpActions.length > 0 || serviceUser?.medicalNotes || serviceUser?.allergies;
+  const { serviceUser, journalEntries, followUpActions, auditsDueToday } = data;
+  const hasAny =
+    journalEntries.length > 0 ||
+    followUpActions.length > 0 ||
+    (auditsDueToday?.length ?? 0) > 0 ||
+    serviceUser?.medicalNotes ||
+    serviceUser?.allergies;
 
   if (!hasAny) {
     return (
@@ -94,12 +102,50 @@ export function ShiftContextNotes({ serviceUserId, serviceUserName }: { serviceU
         </Card>
       )}
 
+      {(auditsDueToday?.length ?? 0) > 0 && (
+        <Card className="border-[#005EB8]/20 bg-[#E8F4FC]/30">
+          <CardHeader className="py-2 px-3">
+            <CardTitle className="text-xs font-medium flex items-center gap-1.5 text-[#005EB8]">
+              <ClipboardList className="size-3.5" />
+              Audits due today ({auditsDueToday!.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="py-0 px-3 pb-3 space-y-2">
+            {auditsDueToday!.slice(0, 8).map((a) => (
+              <div key={a.templateId} className="rounded border border-[#005EB8]/15 bg-white px-3 py-2 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{a.templateName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {a.haveToday}/{a.neededToday} done today
+                  </p>
+                </div>
+                <Link
+                  href={a.openPath}
+                  className={cn(
+                    buttonVariants({ size: "sm" }),
+                    "min-h-[40px] bg-[#005EB8] hover:bg-[#004a94] text-white shrink-0 inline-flex items-center gap-1.5"
+                  )}
+                >
+                  Open
+                  <ArrowRight className="size-3.5" />
+                </Link>
+              </div>
+            ))}
+            {auditsDueToday!.length > 8 ? (
+              <p className="text-xs text-muted-foreground">
+                Showing 8 of {auditsDueToday!.length}. Open Audit recording to see the full list.
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
+
       {journalEntries.length > 0 && (
         <Card>
           <CardHeader className="py-2 px-3">
             <CardTitle className="text-xs font-medium flex items-center gap-1.5">
               <BookOpen className="size-3.5" />
-              Recent journal entries
+              Recent notes
             </CardTitle>
           </CardHeader>
           <CardContent className="py-0 px-3 pb-2 max-h-40 overflow-y-auto space-y-2 text-sm">

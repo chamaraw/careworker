@@ -30,7 +30,8 @@ import type { ShiftType } from "@prisma/client";
 const SHIFT_TYPE_OPTIONS: { value: ShiftType; label: string }[] = [
   { value: "STANDARD", label: "Standard" },
   { value: "LONE_WORKING", label: "Lone working" },
-  { value: "SLEEP_NIGHT", label: "Sleep night" },
+  { value: "AWAKE_NIGHT", label: "Awake night (hourly)" },
+  { value: "SLEEP_NIGHT", label: "Sleep night (fixed)" },
 ];
 
 export function AddTimeRecordDialog({

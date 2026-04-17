@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { updateServiceUser } from "./actions";
+import { getPropertyUnitsForSelect } from "@/app/(dashboard)/housing/actions";
 import { format } from "date-fns";
 
 type User = {
@@ -22,19 +23,23 @@ type User = {
   dateOfBirth: Date | null;
   address: string | null;
   propertyId: string | null;
+  unitId: string | null;
   allergies: string | null;
   medicalNotes: string | null;
   emergencyContactName: string | null;
   emergencyContactPhone: string | null;
   careNeedsLevel: string | null;
+  carePackageId: string | null;
 };
 
 export function ServiceUserEditForm({
   user,
   properties,
+  carePackages,
 }: {
   user: User;
   properties: { id: string; name: string }[];
+  carePackages: { id: string; name: string; slug: string }[];
 }) {
   const router = useRouter();
   const [name, setName] = useState(user.name);
@@ -43,6 +48,30 @@ export function ServiceUserEditForm({
   );
   const [address, setAddress] = useState(user.address ?? "");
   const [propertyId, setPropertyId] = useState(user.propertyId ?? "");
+  const [unitId, setUnitId] = useState(user.unitId ?? "");
+  const [propertyUnits, setPropertyUnits] = useState<
+    { id: string; label: string }[]
+  >([]);
+
+  useEffect(() => {
+    if (!propertyId) {
+      setPropertyUnits([]);
+      setUnitId("");
+      return;
+    }
+    let cancelled = false;
+    getPropertyUnitsForSelect(propertyId).then((units: { id: string; label: string }[]) => {
+      if (cancelled) return;
+      setPropertyUnits(units);
+      setUnitId((cur) => {
+        if (!units.length) return cur ? "" : "";
+        return cur && units.some((u) => u.id === cur) ? cur : "";
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [propertyId]);
   const [allergies, setAllergies] = useState(user.allergies ?? "");
   const [medicalNotes, setMedicalNotes] = useState(user.medicalNotes ?? "");
   const [emergencyContactName, setEmergencyContactName] = useState(
@@ -52,6 +81,7 @@ export function ServiceUserEditForm({
     user.emergencyContactPhone ?? ""
   );
   const [careNeedsLevel, setCareNeedsLevel] = useState(user.careNeedsLevel ?? "");
+  const [carePackageId, setCarePackageId] = useState(user.carePackageId ?? "");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
 
@@ -69,11 +99,13 @@ export function ServiceUserEditForm({
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
         address: address.trim() || "",
         propertyId: propertyId || null,
+        unitId: unitId || null,
         allergies: allergies.trim() || "",
         medicalNotes: medicalNotes.trim() || "",
         emergencyContactName: emergencyContactName.trim() || "",
         emergencyContactPhone: emergencyContactPhone.trim() || "",
         careNeedsLevel: careNeedsLevel.trim() || "",
+        carePackageId: carePackageId.trim() || null,
       });
       router.push(`/service-users/${user.id}`);
       router.refresh();
@@ -118,7 +150,10 @@ export function ServiceUserEditForm({
       {properties.length > 0 && (
         <div className="space-y-2">
           <Label>Property</Label>
-          <Select value={propertyId} onValueChange={(v) => setPropertyId(v ?? "")}>
+          <Select
+            value={propertyId}
+            onValueChange={(v) => setPropertyId(v ?? "")}
+          >
             <SelectTrigger className="min-h-[48px]">
               {propertyId ? (
                 <span className="truncate">{properties.find((p) => p.id === propertyId)?.name ?? propertyId}</span>
@@ -131,6 +166,30 @@ export function ServiceUserEditForm({
               {properties.map((p) => (
                 <SelectItem key={p.id} value={p.id}>
                   {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      {propertyId && propertyUnits.length > 0 && (
+        <div className="space-y-2">
+          <Label>Unit (housing)</Label>
+          <Select value={unitId} onValueChange={(v) => setUnitId(v ?? "")}>
+            <SelectTrigger className="min-h-[48px]">
+              {unitId ? (
+                <span className="truncate">
+                  {propertyUnits.find((u) => u.id === unitId)?.label ?? unitId}
+                </span>
+              ) : (
+                <span className="text-[var(--muted-foreground)]">None</span>
+              )}
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">None</SelectItem>
+              {propertyUnits.map((u) => (
+                <SelectItem key={u.id} value={u.id}>
+                  {u.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -185,6 +244,33 @@ export function ServiceUserEditForm({
           className="min-h-[48px]"
         />
       </div>
+      {carePackages.length > 0 && (
+        <div className="space-y-2">
+          <Label>Care package</Label>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Drives which <strong className="text-slate-800">care package</strong> audit forms appear for this person. Manage links under Audits → Care packages.
+          </p>
+          <Select value={carePackageId} onValueChange={(v) => setCarePackageId(v ?? "")}>
+            <SelectTrigger className="min-h-[48px]">
+              {carePackageId ? (
+                <span className="truncate">
+                  {carePackages.find((p) => p.id === carePackageId)?.name ?? carePackageId}
+                </span>
+              ) : (
+                <span className="text-[var(--muted-foreground)]">None</span>
+              )}
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">None</SelectItem>
+              {carePackages.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       <div className="flex gap-2">
         <Button type="submit" size="lg" className="min-h-[48px]" disabled={pending}>
           {pending ? "Saving…" : "Save"}

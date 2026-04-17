@@ -92,12 +92,12 @@ function LoginForm() {
             >
               {loading ? "Signing in…" : "Sign in"}
             </Button>
-            <div className="text-center">
-              <Link
-                href="/forgot-password"
-                className="text-sm text-primary hover:underline"
-              >
+            <div className="flex flex-col gap-2 text-center text-sm">
+              <Link href="/forgot-password" className="text-primary hover:underline">
                 Forgot password?
+              </Link>
+              <Link href="/manager/login" className="text-muted-foreground hover:text-foreground hover:underline">
+                Audit manager sign-in
               </Link>
             </div>
           </form>

@@ -9,5 +9,6 @@ export default async function DashboardLayout({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  return <AppLayout>{children}</AppLayout>;
+  const isAdmin = (session.user as { role?: string }).role === "ADMIN";
+  return <AppLayout staffAssistantForAdmin={isAdmin}>{children}</AppLayout>;
 }

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { updateIncidentStatus } from "@/app/(dashboard)/incidents/actions";
+import { createAuditAction } from "@/app/(dashboard)/audits/actions";
 import { ScheduleFollowUpDialog } from "./ScheduleFollowUpDialog";
 import { useRouter } from "next/navigation";
 import { CalendarPlus } from "lucide-react";
@@ -31,7 +32,7 @@ type Incident = {
   actionTaken: string | null;
   followUpNotes: string | null;
   occurredAt: Date | string;
-  serviceUser: { id: string; name: string };
+  serviceUser: { id: string; name: string; propertyId?: string | null };
   careWorker: { name: string };
 };
 
@@ -89,6 +90,27 @@ export function IncidentCard({
             <CalendarPlus className="size-4" />
             Schedule follow-up
           </Button>
+          {isAdmin && incident.serviceUser.propertyId && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-[40px]"
+              onClick={async () => {
+                await createAuditAction({
+                  propertyId: incident.serviceUser.propertyId as string,
+                  description: `Incident follow-up: ${incident.description.slice(0, 120)}`,
+                  dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                  source: "INCIDENT",
+                  incidentId: incident.id,
+                  priority: incident.severity === "CRITICAL" ? "URGENT" : incident.severity === "HIGH" ? "HIGH" : "MEDIUM",
+                });
+                router.refresh();
+              }}
+            >
+              Create audit action
+            </Button>
+          )}
         </div>
         <ScheduleFollowUpDialog
           open={scheduleFollowUpOpen}

@@ -15,6 +15,11 @@ export type PayrollDay = {
   shiftType: ShiftType;
   propertyId: string | null;
   propertyName: string | null;
+  basePay: number;
+  pay: number;
+  isUkBankHoliday: boolean;
+  ukBankHolidayName: string | null;
+  ukHolidayMultiplier: number; // 1.0 if no boost configured for that day
 };
 
 export type PropertyBreakdownItem = {

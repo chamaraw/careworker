@@ -48,7 +48,7 @@ export function PerformanceTable({ rows }: { rows: WorkerPerformanceRow[] }) {
             <TableHead className="text-base font-semibold text-right">Time variance</TableHead>
             <TableHead className="text-base font-semibold text-right">Completion</TableHead>
             <TableHead className="text-base font-semibold text-right">Shifts</TableHead>
-            <TableHead className="text-base font-semibold text-right">Journal</TableHead>
+            <TableHead className="text-base font-semibold text-right">Notes</TableHead>
             <TableHead className="text-base font-semibold text-right">Incidents</TableHead>
             <TableHead className="text-base font-semibold text-right">Score</TableHead>
           </TableRow>

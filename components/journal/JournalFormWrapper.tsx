@@ -19,7 +19,7 @@ export function JournalFormWrapper({
         onClick={() => setOpen(true)}
       >
         <BookOpen className="size-5" />
-        Add journal entry
+        Add note
       </Button>
       {open && (
         <JournalForm
